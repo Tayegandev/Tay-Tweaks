@@ -1,0 +1,51 @@
+name: Build and publish Tay Tweaks
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PS2EXE
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module ps2exe -Scope CurrentUser -Force
+          Import-Module ps2exe
+      - name: Build Windows EXE
+        shell: pwsh
+        run: |
+          if (!(Test-Path ./TayTweaks.ps1)) { throw 'TayTweaks.ps1 is missing from repository root' }
+          if (!(Test-Path ./TayUpdater.ps1)) { throw 'TayUpdater.ps1 is missing from repository root' }
+          Invoke-PS2EXE -inputFile ./TayTweaks.ps1 -outputFile ./TayTweaks.exe -noConsole -requireAdmin -title 'Tay Tweaks' -product 'Tay Tweaks' -version '6.0.0.0'
+          if (!(Test-Path ./TayTweaks.exe)) { throw 'EXE was not created' }
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TayTweaks-Windows
+          path: |
+            TayTweaks.exe
+            TayUpdater.ps1
+      - name: Publish stable release and manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version='${{ github.ref_name }}'.TrimStart('v')
+          $hash=(Get-FileHash ./TayTweaks.exe -Algorithm SHA256).Hash
+          gh release create '${{ github.ref_name }}' ./TayTweaks.exe ./TayUpdater.ps1 --title "Tay Tweaks ${{ github.ref_name }}" --generate-notes
+          git fetch origin main
+          git checkout main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          $manifest=@{version=$version;download_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/TayTweaks.exe";sha256=$hash;changelog="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}";mandatory=$false}
+          $manifest | ConvertTo-Json | Set-Content ./latest.json -Encoding utf8
+          git add latest.json
+          git commit -m "Publish update manifest for ${{ github.ref_name }}"
+          git push origin main
