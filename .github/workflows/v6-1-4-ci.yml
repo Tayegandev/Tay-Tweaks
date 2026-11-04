@@ -1,13 +1,5 @@
 name: Tay Tweaks v6.1.4 CI
 on:
-  push:
-    branches:
-      - v6.1.4-display-and-60
-  pull_request:
-    paths:
-      - 'TayTweaks.ps1'
-      - 'Build-TayTweaks-EXE.ps1'
-      - '.github/workflows/v6-1-4-ci.yml'
   workflow_dispatch:
 permissions:
   contents: read
