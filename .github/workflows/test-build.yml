@@ -26,11 +26,12 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path ./TayTweaks.ps1)) { throw 'Missing TayTweaks.ps1' }
-          Invoke-PS2EXE -inputFile ./TayTweaks.ps1 -outputFile ./TayTweaks.exe -noConsole -requireAdmin -title 'Tay Tweaks' -product 'Tay Tweaks' -version '6.0.0.0'
+          if (!(Test-Path ./TayTweaks.ico)) { throw 'Missing TayTweaks.ico' }
+          ./Build-TayTweaks-EXE.ps1
           if (!(Test-Path ./TayTweaks.exe)) { throw 'Build produced no EXE' }
       - name: Upload EXE for testing
         uses: actions/upload-artifact@v4
         with:
-          name: TayTweaks-v6-Test
+          name: TayTweaks-Test
           path: TayTweaks.exe
           if-no-files-found: error
