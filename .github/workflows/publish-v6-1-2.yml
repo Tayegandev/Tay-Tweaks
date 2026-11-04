@@ -50,7 +50,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $url='https://github.com/${{ github.repository }}/releases/download/v6.1.2/TayTweaks.exe'
-          $manifest=[ordered]@{version='6.1.1';download_url=$url;sha256=$env:EXE_SHA256;changelog='https://github.com/${{ github.repository }}/releases/tag/v6.1.2';mandatory=$false}
+          $manifest=[ordered]@{version='6.1.2';download_url=$url;sha256=$env:EXE_SHA256;changelog='https://github.com/${{ github.repository }}/releases/tag/v6.1.2';mandatory=$false}
           $manifest | ConvertTo-Json | Set-Content -Path stable/latest.json -Encoding utf8
           git -C stable config user.name 'github-actions[bot]'
           git -C stable config user.email '41898282+github-actions[bot]@users.noreply.github.com'
