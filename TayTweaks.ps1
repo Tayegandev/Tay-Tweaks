@@ -214,6 +214,23 @@ $inputTab=Tab "Keyboard / Input"
 $filterTab=Tab "FilterKeys Pro"
 $tcpTab=Tab "TCP / Network"
 $settingsTab=Tab "Settings"
+# Device-specific detection is read-only. Display changes are tested by Windows, not guessed from vendor.
+$script:HardwareProfile=$null
+function GetTayHardwareProfile {
+ $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+ $cpu=Get-CimInstance Win32_Processor -ErrorAction Stop|Select-Object -First 1
+ $gpu=@(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue)
+ $memory=[math]::Round(([double]$os.TotalVisibleMemorySize/1MB),1)
+ $graphics=@($gpu|ForEach-Object { [pscustomobject]@{Name=[string]$_.Name;Driver=[string]$_.DriverVersion;Status=[string]$_.Status} })
+ return [pscustomobject]@{Windows=[string]$os.Caption;Build=[string]$os.BuildNumber;CPU=[string]$cpu.Name;RAM_GB=$memory;GPU=$graphics;Detected=(Get-Date)}
+}
+function TestTayInternet {
+ try {
+  $request=[System.Net.HttpWebRequest]::Create('https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json')
+  $request.Method='HEAD';$request.Timeout=3500;$request.ReadWriteTimeout=3500;$request.UserAgent='TayTweaks-Connectivity/6.1.5'
+  $response=$request.GetResponse();try {return [int]$response.StatusCode -ge 200 -and [int]$response.StatusCode -lt 400}finally{$response.Close()}
+ }catch{return $false}
+}
 # Display Manager: supported modes only; custom requests must match a driver-advertised mode.
 $displayTab=Tab "Display Manager";$displayTab.AutoScroll=$true
 Add-Type -TypeDefinition @'
@@ -256,6 +273,9 @@ $dmH=New-Object Windows.Forms.NumericUpDown;$dmH.Minimum=200;$dmH.Maximum=4320;$
 $dmHz=New-Object Windows.Forms.NumericUpDown;$dmHz.Minimum=1;$dmHz.Maximum=240;$dmHz.Increment=1;$dmHz.Value=60;$dmHz.Location=[Drawing.Point]::new(325,238);$dmHz.Width=140;$displayTab.Controls.Add($dmHz)
 [void](DMLabel 'Custom resolution requests must already be driver-advertised. Unsupported modes are blocked.' 24 286)
 $dmStatus=DMLabel 'Ready.' 24 328
+$dmProfile=DMLabel 'Hardware: not scanned yet' 24 442 800
+$dmInternet=DMLabel 'Internet: not checked' 24 476 800
+$dmScan=New-Object Windows.Forms.Button;$dmScan.Text='Detect my PC + internet';$dmScan.Location=[Drawing.Point]::new(395,380);$dmScan.Size=[Drawing.Size]::new(200,38);$displayTab.Controls.Add($dmScan)
 $dmRefresh=New-Object Windows.Forms.Button;$dmRefresh.Text='Refresh modes';$dmRefresh.Location=[Drawing.Point]::new(24,380);$dmRefresh.Size=[Drawing.Size]::new(150,38);$displayTab.Controls.Add($dmRefresh)
 $dmApply=New-Object Windows.Forms.Button;$dmApply.Text='Apply and confirm';$dmApply.Location=[Drawing.Point]::new(195,380);$dmApply.Size=[Drawing.Size]::new(180,38);$displayTab.Controls.Add($dmApply)
 $script:DMModes=@();$script:DMBusy=$false
@@ -271,7 +291,7 @@ function DMRefresh {
   }
   $dmHz.Maximum=[decimal][math]::Max(240,[int]$old.dmDisplayFrequency)
   $dmHz.Value=[decimal][math]::Max(1,[int]$old.dmDisplayFrequency)
-  $dmStatus.Text=if($script:DMModes.Count -eq 0){'No driver-advertised modes found. Check your GPU driver.'}else{"$($script:DMModes.Count) modes found. Type a refresh rate or choose a supported mode."}
+  $dmStatus.Text=if($script:DMModes.Count -eq 0){'No driver-advertised modes found. Check your GPU driver.'}else{"$($script:DMModes.Count) driver-advertised modes. Only compatible combinations can be applied."}
   $dmW.Value=[decimal][Math]::Max(320,[Math]::Min(7680,[int]$old.dmPelsWidth))
   $dmH.Value=[decimal][Math]::Max(200,[Math]::Min(4320,[int]$old.dmPelsHeight))
   DMFillModes
@@ -298,6 +318,19 @@ $dmMode.Add_SelectedIndexChanged({
  }
 })
 $dmRefresh.Add_Click({DMRefresh})
+$dmScan.Add_Click({
+ $dmScan.Enabled=$false
+ try {
+  $script:HardwareProfile=GetTayHardwareProfile
+  $p=$script:HardwareProfile
+  $names=(@($p.GPU|ForEach-Object {$_.Name+' (driver '+$_.Driver+')'})) -join '; '
+  $dmProfile.Text="CPU: $($p.CPU) | RAM: $($p.RAM_GB) GB | GPU: $names"
+  $dmProfile.AutoEllipsis=$true
+  DMRefresh
+ }catch{$dmProfile.Text="Hardware detection unavailable: $($_.Exception.Message)"}
+ $dmInternet.Text=if(TestTayInternet){'Internet: GitHub update endpoint reachable'}else{'Internet: offline, blocked or endpoint unavailable'}
+ $dmScan.Enabled=$true
+})
 $dmApply.Add_Click({
  if($script:DMBusy){return};$script:DMBusy=$true
  try{
@@ -325,7 +358,9 @@ $dmApply.Add_Click({
  }catch{$dmStatus.Text="Display Manager: $($_.Exception.Message)";Log $dmStatus.Text;[Windows.Forms.MessageBox]::Show($dmStatus.Text,'Display Manager')|Out-Null}
  finally{$script:DMBusy=$false}
 })
-$dmKind.SelectedIndex=0;DMRefresh
+$dmKind.SelectedIndex=0
+# Avoid expensive display enumeration and hardware/network probes during app startup.
+$displayTab.Add_Enter({if($script:DMModes.Count -eq 0){DMRefresh}})
 
 $advancedTab.AutoScroll=$true
 $advIntro=New-Object System.Windows.Forms.Label
@@ -663,7 +698,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'6.1.4';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'6.1.5';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
@@ -726,7 +761,7 @@ ToolButton $netTab "Renew DHCP address" "May briefly disconnect you; only use fo
  if($c -eq [System.Windows.Forms.DialogResult]::Yes){$o=(& ipconfig.exe /release 2>&1|Out-String);$o+="`r`n"+(& ipconfig.exe /renew 2>&1|Out-String);Log "DHCP renew requested.";ShowOutput "DHCP renew result" $o}
 }
 $about=New-Object System.Windows.Forms.Label;$about.Location=[System.Drawing.Point]::new(24,24);$about.Size=New-Object System.Drawing.Size(870,450);$about.Font=New-Object System.Drawing.Font("Segoe UI",11)
-$about.Text="TAY TWEAKS v6.1.4`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
+$about.Text="TAY TWEAKS v6.1.5`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
 $about.ForeColor=[System.Drawing.Color]::FromArgb(210,214,223);$aboutTab.Controls.Add($about)
 $status=New-Object System.Windows.Forms.Label;$status.Text="Ready • Administrator mode • Restore point required before tweaks";$status.Location=[System.Drawing.Point]::new(22,683);$status.Size=New-Object System.Drawing.Size(900,28);$status.Anchor="Bottom,Left,Right";$status.ForeColor=[System.Drawing.Color]::FromArgb(195,199,210);$form.Controls.Add($status)
 function BottomButton([string]$text,[int]$x,[int]$width){$b=New-Object System.Windows.Forms.Button;$b.Text=$text;$b.Location=[System.Drawing.Point]::new($x,720);$b.Size=New-Object System.Drawing.Size($width,44);$b.Anchor="Bottom,Left";$b.FlatStyle="Flat";$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(255,92,35);$b.ForeColor=[System.Drawing.Color]::FromArgb(20,20,24);$b.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold);$form.Controls.Add($b);return $b}
