@@ -1,0 +1,59 @@
+name: Publish Tay Tweaks v6.1.2
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PUBLISH_V612 to release v6.1.2 and enable in-app updates
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: taytweaks-v612-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: ${{ inputs.confirmation == 'PUBLISH_V612' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout v6.1.2 source
+        uses: actions/checkout@v4
+        with:
+          ref: v6.1.2-filterkeys-fix
+          path: source
+      - name: Checkout stable manifest
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: stable
+      - name: Build and hash EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Install-Module ps2exe -Scope CurrentUser -Force
+          Import-Module ps2exe
+          if (!(Test-Path source/TayUpdater.ps1)) { throw 'Missing source/TayUpdater.ps1' }
+          & ./source/Build-TayTweaks-EXE.ps1
+          if (!(Test-Path source/TayTweaks.exe)) { throw 'EXE missing after build' }
+          $hash=(Get-FileHash source/TayTweaks.exe -Algorithm SHA256).Hash
+          if ($hash -notmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid SHA256' }
+          "EXE_SHA256=$hash" >> $env:GITHUB_ENV
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release create v6.1.2 source/TayTweaks.exe source/TayUpdater.ps1 source/TayTweaks.ico --repo ${{ github.repository }} --target v6.1.2-filterkeys-fix --title 'Tay-Tweaks v6.1.2' --notes 'v6.1.2 adds FilterKeys Pro, the custom Tay-Tweaks icon and an updated window title. Includes a backup/restore option for FilterKeys settings. Test the app on your system before applying new keyboard timings.'
+      - name: Update stable latest.json
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url='https://github.com/${{ github.repository }}/releases/download/v6.1.2/TayTweaks.exe'
+          $manifest=[ordered]@{version='6.1.1';download_url=$url;sha256=$env:EXE_SHA256;changelog='https://github.com/${{ github.repository }}/releases/tag/v6.1.2';mandatory=$false}
+          $manifest | ConvertTo-Json | Set-Content -Path stable/latest.json -Encoding utf8
+          git -C stable config user.name 'github-actions[bot]'
+          git -C stable config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C stable add latest.json
+          git -C stable commit -m 'Publish Tay-Tweaks v6.1.2 update manifest'
+          git -C stable push origin HEAD:main
