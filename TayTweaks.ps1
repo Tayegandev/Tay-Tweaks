@@ -239,7 +239,8 @@ public static class TayDisplay {
  public static DEVMODE Blank(){var d=new DEVMODE();d.dmSize=(ushort)Marshal.SizeOf(typeof(DEVMODE));return d;}
  public static DEVMODE Current(){var d=Blank();if(!EnumDisplaySettings(null,-1,ref d))throw new Exception("Cannot read current display mode");return d;}
  public static int Test(DEVMODE d){return ChangeDisplaySettingsEx(null,ref d,IntPtr.Zero,2,IntPtr.Zero);}
- public static int Apply(DEVMODE d){return ChangeDisplaySettingsEx(null,ref d,IntPtr.Zero,1,IntPtr.Zero);}
+ public static int Apply(DEVMODE d){return ChangeDisplaySettingsEx(null,ref d,IntPtr.Zero,0,IntPtr.Zero);}
+ public static int Persist(DEVMODE d){return ChangeDisplaySettingsEx(null,ref d,IntPtr.Zero,1,IntPtr.Zero);}
 }
 '@ -ErrorAction Stop
 function DMLabel($text,$x,$y,$w=800){
@@ -255,7 +256,7 @@ $dmMode=New-Object Windows.Forms.ComboBox;$dmMode.DropDownStyle='DropDownList';$
 $dmW=New-Object Windows.Forms.NumericUpDown;$dmW.Minimum=320;$dmW.Maximum=7680;$dmW.Value=1280;$dmW.Location=[Drawing.Point]::new(24,238);$dmW.Width=120;$displayTab.Controls.Add($dmW)
 $dmH=New-Object Windows.Forms.NumericUpDown;$dmH.Minimum=200;$dmH.Maximum=4320;$dmH.Value=720;$dmH.Location=[Drawing.Point]::new(175,238);$dmH.Width=120;$displayTab.Controls.Add($dmH)
 $dmHz=New-Object Windows.Forms.ComboBox;$dmHz.DropDownStyle='DropDownList';$dmHz.Location=[Drawing.Point]::new(325,238);$dmHz.Width=140;$displayTab.Controls.Add($dmHz)
-[void](DMLabel 'Custom entries require driver support. Unsupported modes will not be forced.' 24 286)
+[void](DMLabel 'Custom resolution requests must already be driver-advertised. Unsupported modes are blocked.' 24 286)
 $dmStatus=DMLabel 'Ready.' 24 328
 $dmRefresh=New-Object Windows.Forms.Button;$dmRefresh.Text='Refresh modes';$dmRefresh.Location=[Drawing.Point]::new(24,380);$dmRefresh.Size=[Drawing.Size]::new(150,38);$displayTab.Controls.Add($dmRefresh)
 $dmApply=New-Object Windows.Forms.Button;$dmApply.Text='Apply and confirm';$dmApply.Location=[Drawing.Point]::new(195,380);$dmApply.Size=[Drawing.Size]::new(180,38);$displayTab.Controls.Add($dmApply)
@@ -321,7 +322,7 @@ $dmApply.Add_Click({
   $yes.Add_Click({$accepted=$true;$dialog.Close()});$no.Add_Click({$dialog.Close()})
   $notice.Text="Keep $w x $h @ $hz Hz? Reverting in 15 seconds."
   $timer.Start();try{[void]$dialog.ShowDialog($form)}finally{$timer.Stop();$timer.Dispose();$dialog.Dispose()}
-  if($accepted){$dmStatus.Text="Saved $w x $h @ $hz Hz; persists after closing Tay-Tweaks.";Log $dmStatus.Text}
+  if($accepted){$saved=[TayDisplay]::Persist($target);if($saved -ne 0){[void][TayDisplay]::Apply($old);throw "Windows could not save the selected mode ($saved); the previous resolution was restored."};$dmStatus.Text="Saved $w x $h @ $hz Hz; persists after closing Tay-Tweaks.";Log $dmStatus.Text}
   else{$revert=[TayDisplay]::Apply($old);if($revert -ne 0){throw "Restore failed: $revert. Use Windows Display settings."};$dmStatus.Text='Previous resolution restored.'}
   DMRefresh
  }catch{$dmStatus.Text="Display Manager: $($_.Exception.Message)";Log $dmStatus.Text;[Windows.Forms.MessageBox]::Show($dmStatus.Text,'Display Manager')|Out-Null}
@@ -412,11 +413,12 @@ $advancedTab.AutoScrollMinSize=[System.Drawing.Size]::new(810,550)
 # Sidebar navigation replaces the default horizontal tab strip.
 $tabs.Appearance='FlatButtons';$tabs.ItemSize=[System.Drawing.Size]::new(0,1);$tabs.SizeMode='Fixed'
 $tabs.Location=[System.Drawing.Point]::new(192,105);$tabs.Size=[System.Drawing.Size]::new(875,570)
-$nav=New-Object System.Windows.Forms.Panel;$nav.Location=[System.Drawing.Point]::new(0,94);$nav.Size=[System.Drawing.Size]::new(186,590);$nav.Anchor='Top,Bottom,Left';$nav.BackColor=[System.Drawing.Color]::FromArgb(21,17,20);$form.Controls.Add($nav)
+$nav=New-Object System.Windows.Forms.Panel;$nav.Location=[System.Drawing.Point]::new(0,94);$nav.Size=[System.Drawing.Size]::new(186,590);$nav.AutoScroll=$true;$nav.Anchor='Top,Bottom,Left';$nav.BackColor=[System.Drawing.Color]::FromArgb(21,17,20);$form.Controls.Add($nav)
 $navY=12
 foreach($page in @($tabs.TabPages)){
  $b=New-Object System.Windows.Forms.Button;$b.Text='  '+$page.Text;$b.Tag=$page;$b.TextAlign='MiddleLeft';$b.Location=[System.Drawing.Point]::new(8,$navY);$b.Size=[System.Drawing.Size]::new(169,43);$b.FlatStyle='Flat';$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(32,25,28);$b.ForeColor=[System.Drawing.Color]::FromArgb(255,142,75);$b.Font=New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold);$b.Add_Click({$tabs.SelectedTab=$this.Tag});$nav.Controls.Add($b);$navY+=49
 }
+$nav.AutoScrollMinSize=[System.Drawing.Size]::new(178,$navY+8)
 # Game Boost: temporary per-process priority only. Windows still manages memory allocation.
 $boostTitle=New-Object System.Windows.Forms.Label;$boostTitle.Text="TEMPORARY GAME PRIORITY";$boostTitle.Location=[System.Drawing.Point]::new(24,22);$boostTitle.Size=[System.Drawing.Size]::new(700,34);$boostTitle.Font=New-Object System.Drawing.Font("Segoe UI",18,[System.Drawing.FontStyle]::Bold);$boostTitle.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$boostTab.Controls.Add($boostTitle)
 $boostInfo=New-Object System.Windows.Forms.Label;$boostInfo.Text="Choose a running game and set High priority while it runs. This is temporary and resets when the process closes. Do not use Realtime priority. Windows automatically manages RAM; forcing extra RAM allocation can make crashes and stutters worse.";$boostInfo.Location=[System.Drawing.Point]::new(26,68);$boostInfo.Size=[System.Drawing.Size]::new(930,64);$boostInfo.ForeColor=[System.Drawing.Color]::FromArgb(205,205,215);$boostTab.Controls.Add($boostInfo)
@@ -710,7 +712,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'6.2';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'6.1.3';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
@@ -773,7 +775,7 @@ ToolButton $netTab "Renew DHCP address" "May briefly disconnect you; only use fo
  if($c -eq [System.Windows.Forms.DialogResult]::Yes){$o=(& ipconfig.exe /release 2>&1|Out-String);$o+="`r`n"+(& ipconfig.exe /renew 2>&1|Out-String);Log "DHCP renew requested.";ShowOutput "DHCP renew result" $o}
 }
 $about=New-Object System.Windows.Forms.Label;$about.Location=[System.Drawing.Point]::new(24,24);$about.Size=New-Object System.Drawing.Size(870,450);$about.Font=New-Object System.Drawing.Font("Segoe UI",11)
-$about.Text="TAY TWEAKS v6.0`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
+$about.Text="TAY TWEAKS v6.1.3`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
 $about.ForeColor=[System.Drawing.Color]::FromArgb(210,214,223);$aboutTab.Controls.Add($about)
 $status=New-Object System.Windows.Forms.Label;$status.Text="Ready • Administrator mode • Restore point required before tweaks";$status.Location=[System.Drawing.Point]::new(22,683);$status.Size=New-Object System.Drawing.Size(900,28);$status.Anchor="Bottom,Left,Right";$status.ForeColor=[System.Drawing.Color]::FromArgb(195,199,210);$form.Controls.Add($status)
 function BottomButton([string]$text,[int]$x,[int]$width){$b=New-Object System.Windows.Forms.Button;$b.Text=$text;$b.Location=[System.Drawing.Point]::new($x,720);$b.Size=New-Object System.Drawing.Size($width,44);$b.Anchor="Bottom,Left";$b.FlatStyle="Flat";$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(255,92,35);$b.ForeColor=[System.Drawing.Color]::FromArgb(20,20,24);$b.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold);$form.Controls.Add($b);return $b}
