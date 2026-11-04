@@ -450,7 +450,7 @@ PageButton $filterTab 'Apply + save to registry' 390 462 {
   if($d.iWaitMSec -gt 0 -and $d.iBounceMSec -gt 0){throw 'Wait and Bounce cannot both be enabled. Set one of them to 0 ms.'}
   $bits=[uint32]0
   foreach($spec in $fkFlagSpecs){if($fkFlags[$spec.Key].Checked){$bits=$bits -bor [uint32]$spec.Bit}}
-  $d.dwFlags=([uint32]$d.dwFlags -band [uint32]0xFFFFFF80) -bor $bits
+  $d.dwFlags=([uint32]$d.dwFlags -band ([uint32]::MaxValue -bxor [uint32]127)) -bor $bits
   [TayFilterKeysNative]::Write($d)
   $fkStatus.Text='Applied. Windows may normalize unsupported timings.'
   LoadFilterKeysUI
