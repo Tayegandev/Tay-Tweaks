@@ -385,14 +385,19 @@ public static class TayFilterKeysNative {
  }
  public static void Write(TayFilterKeysData d) {
   d.cbSize=(uint)Marshal.SizeOf(typeof(TayFilterKeysData));
-  if(!SystemParametersInfo(0x33,d.cbSize,ref d,3))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+  if(!SystemParametersInfo(0x33,d.cbSize,ref d,3)) {
+   int code=Marshal.GetLastWin32Error();
+   throw new InvalidOperationException("Windows rejected the FilterKeys settings (error "+code+"). "+
+    "Wait="+d.iWaitMSec+"ms, Delay="+d.iDelayMSec+"ms, Repeat="+d.iRepeatMSec+"ms, Bounce="+d.iBounceMSec+
+    "ms, Flags="+d.dwFlags+". "+(code==0?"No additional Windows error was provided.":"Check the Windows error code."));
+  }
  }
 }
 '@
 }
 $filterTab.AutoScroll=$true
 PageLabel $filterTab 'FILTERKEYS PRO  |  Keyboard repeat and accessibility' 24 12 | Out-Null
-PageLabel $filterTab 'Very low timings may be rejected by Windows or cause missed inputs. Not a polling-rate booster.' 24 42 | Out-Null
+PageLabel $filterTab 'Windows may reject unsupported timings. Values of 1-49 ms are blocked for safety.' 24 42 | Out-Null
 $fkControls=@{}
 $fkSpecs=@(
  @{Key='iWaitMSec';Label='Ignore presses shorter than (ms)';Min=0;Max=2000;Y=90},
@@ -437,10 +442,15 @@ PageButton $filterTab 'Apply + save to registry' 390 462 {
   $folder=Split-Path $backup
   if(-not(Test-Path $backup)){New-Item -ItemType Directory -Path $folder -Force|Out-Null;[TayFilterKeysNative]::Read()|ConvertTo-Json|Set-Content -LiteralPath $backup -Encoding UTF8}
   $d=[TayFilterKeysNative]::Read()
-  foreach($k in @('iWaitMSec','iDelayMSec','iRepeatMSec','iBounceMSec')){$d.$k=[uint32]$fkControls[$k].Value}
+  foreach($k in @('iWaitMSec','iDelayMSec','iRepeatMSec','iBounceMSec')){
+   $value=[uint32]$fkControls[$k].Value
+   if($value -gt 0 -and $value -lt 50){throw "$k = $value ms is too low. Use 0 (where supported) or at least 50 ms. Windows may enforce stricter limits."}
+   $d.$k=$value
+  }
+  if($d.iWaitMSec -gt 0 -and $d.iBounceMSec -gt 0){throw 'Wait and Bounce cannot both be enabled. Set one of them to 0 ms.'}
   $bits=[uint32]0
   foreach($spec in $fkFlagSpecs){if($fkFlags[$spec.Key].Checked){$bits=$bits -bor [uint32]$spec.Bit}}
-  $d.dwFlags=$bits
+  $d.dwFlags=([uint32]$d.dwFlags -band [uint32]0xFFFFFF80) -bor $bits
   [TayFilterKeysNative]::Write($d)
   $fkStatus.Text='Applied. Windows may normalize unsupported timings.'
   LoadFilterKeysUI
@@ -521,7 +531,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'6.1.0';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'6.1.1';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
