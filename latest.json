@@ -1,7 +1,7 @@
 {
   "version": "6.1.1",
-  "download_url": "https://github.com/Tayegandev/Tay-Tweaks/releases/download/v6.1.1/TayTweaks.exe",
-  "sha256": "A761A79917C901668629D956C12F12B10D9CA14310E05410DED1DB851BD4C59F",
-  "changelog": "https://github.com/Tayegandev/Tay-Tweaks/releases/tag/v6.1.1",
+  "download_url": "https://github.com/Tayegandev/Tay-Tweaks/releases/download/v6.1.2/TayTweaks.exe",
+  "sha256": "DE63F48C1F30865217FD7C1261CB1DDBFEE9DCCD56CAC4B6A2A3AD25A2B0AF73",
+  "changelog": "https://github.com/Tayegandev/Tay-Tweaks/releases/tag/v6.1.2",
   "mandatory": false
 }
