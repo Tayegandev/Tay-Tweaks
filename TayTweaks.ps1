@@ -143,6 +143,7 @@ function Tab([string]$name){$p=New-Object System.Windows.Forms.TabPage;$p.Text=$
 $homeTab=Tab "Home";$tweakTab=Tab "Tweaks";$boostTab=Tab "Game Boost";$usageTab=Tab "Usage";$cleanTab=Tab "Cleanup";$diagTab=Tab "Diagnostics";$netTab=Tab "Network";$aboutTab=Tab "More"
 $advancedTab=Tab "CPU / RAM / GPU"
 $inputTab=Tab "Keyboard / Input"
+$filterTab=Tab "FilterKeys Pro"
 $tcpTab=Tab "TCP / Network"
 $settingsTab=Tab "Settings"
 $hardwareTab=Tab "Hardware Intelligence"
@@ -364,6 +365,100 @@ $mouse=New-Object System.Windows.Forms.NumericUpDown;$mouse.Minimum=1;$mouse.Max
 PageButton $inputTab 'Apply input preferences' 24 303 {try{Set-ItemProperty 'HKCU:\Control Panel\Keyboard' -Name KeyboardDelay -Value ([string]$delay.Value) -ErrorAction Stop;Set-ItemProperty 'HKCU:\Control Panel\Keyboard' -Name KeyboardSpeed -Value ([string]$repeat.Value) -ErrorAction Stop;Set-ItemProperty 'HKCU:\Control Panel\Mouse' -Name MouseSensitivity -Value ([string]$mouse.Value) -ErrorAction Stop;Log 'Applied input preferences';[System.Windows.Forms.MessageBox]::Show('Saved Windows input preferences. Sign out and back in if changes do not take effect. This does not alter keyboard hardware polling or game engine latency.','Input')|Out-Null}catch{[System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'Input error')|Out-Null}} | Out-Null
 PageButton $inputTab 'Open Windows keyboard settings' 24 356 {Start-Process control.exe 'keyboard'} | Out-Null
 PageLabel $inputTab 'Note: Key repeat affects held-key repetition, not first-key response time. Hardware polling and game sensitivity are controlled elsewhere.' 24 410 | Out-Null
+
+# FilterKeys Pro - Windows accessibility settings (per-user).
+if (-not ('TayFilterKeysNative' -as [type])) {
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential)]
+public struct TayFilterKeysData { public uint cbSize, dwFlags, iWaitMSec, iDelayMSec, iRepeatMSec, iBounceMSec; }
+public static class TayFilterKeysNative {
+ [DllImport("user32.dll",SetLastError=true)]
+ public static extern bool SystemParametersInfo(uint action,uint param,ref TayFilterKeysData data,uint flags);
+ public static TayFilterKeysData Read() {
+  var d=new TayFilterKeysData();d.cbSize=(uint)Marshal.SizeOf(typeof(TayFilterKeysData));
+  if(!SystemParametersInfo(0x32,d.cbSize,ref d,0))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+  return d;
+ }
+ public static void Write(TayFilterKeysData d) {
+  d.cbSize=(uint)Marshal.SizeOf(typeof(TayFilterKeysData));
+  if(!SystemParametersInfo(0x33,d.cbSize,ref d,3))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+ }
+}
+'@
+}
+$filterTab.AutoScroll=$true
+PageLabel $filterTab 'FILTERKEYS PRO  |  Keyboard repeat and accessibility' 24 12 | Out-Null
+PageLabel $filterTab 'Very low timings may be rejected by Windows or cause missed inputs. Not a polling-rate booster.' 24 42 | Out-Null
+$fkControls=@{}
+$fkSpecs=@(
+ @{Key='iWaitMSec';Label='Ignore presses shorter than (ms)';Min=0;Max=2000;Y=90},
+ @{Key='iDelayMSec';Label='Repeat delay (ms)';Min=0;Max=2000;Y=143},
+ @{Key='iRepeatMSec';Label='Repeat interval (ms)';Min=1;Max=2000;Y=196},
+ @{Key='iBounceMSec';Label='Bounce rejection (ms)';Min=0;Max=2000;Y=249}
+)
+foreach($spec in $fkSpecs){
+ PageLabel $filterTab $spec.Label 24 $spec.Y 400 | Out-Null
+ $n=New-Object System.Windows.Forms.NumericUpDown;$n.Minimum=$spec.Min;$n.Maximum=$spec.Max;$n.Increment=1
+ $n.Location=[System.Drawing.Point]::new(440,($spec.Y+2));$n.Width=130
+ $filterTab.Controls.Add($n);$fkControls[$spec.Key]=$n
+}
+$fkFlags=@{}
+$fkFlagSpecs=@(
+ @{Key='On';Text='Filter Keys ON';Bit=1;X=24;Y=311},
+ @{Key='Available';Text='Available';Bit=2;X=240;Y=311},
+ @{Key='Shortcut';Text='Shift shortcut';Bit=4;X=450;Y=311},
+ @{Key='Confirm';Text='Confirm activation';Bit=8;X=24;Y=345},
+ @{Key='Sound';Text='Activation sound';Bit=16;X=240;Y=345},
+ @{Key='Status';Text='Show status';Bit=32;X=450;Y=345},
+ @{Key='Click';Text='Key click';Bit=64;X=24;Y=379}
+)
+foreach($spec in $fkFlagSpecs){
+ $cb=New-Object System.Windows.Forms.CheckBox;$cb.Text=$spec.Text
+ $cb.Location=[System.Drawing.Point]::new($spec.X,$spec.Y);$cb.Width=190
+ $filterTab.Controls.Add($cb);$fkFlags[$spec.Key]=$cb
+}
+$fkStatus=PageLabel $filterTab 'Reading current keyboard settings...' 24 424 800
+function LoadFilterKeysUI {
+ $d=[TayFilterKeysNative]::Read()
+ foreach($k in @('iWaitMSec','iDelayMSec','iRepeatMSec','iBounceMSec')){
+  $n=$fkControls[$k];$n.Value=[math]::Max($n.Minimum,[math]::Min($n.Maximum,[decimal]$d.$k))
+ }
+ foreach($spec in $fkFlagSpecs){$fkFlags[$spec.Key].Checked=(([uint32]$d.dwFlags -band [uint32]$spec.Bit) -ne 0)}
+ $fkStatus.Text='Current settings loaded. Repeat: '+[math]::Round(1000.0/[math]::Max(1,$d.iRepeatMSec),1)+' / sec'
+}
+PageButton $filterTab 'Load current settings' 24 462 {try{LoadFilterKeysUI}catch{[System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'FilterKeys')|Out-Null}} | Out-Null
+PageButton $filterTab 'Apply + save to registry' 390 462 {
+ try {
+  $backup=Join-Path $env:APPDATA 'TayTweaks\FilterKeys-original.json'
+  $folder=Split-Path $backup
+  if(-not(Test-Path $backup)){New-Item -ItemType Directory -Path $folder -Force|Out-Null;[TayFilterKeysNative]::Read()|ConvertTo-Json|Set-Content -LiteralPath $backup -Encoding UTF8}
+  $d=[TayFilterKeysNative]::Read()
+  foreach($k in @('iWaitMSec','iDelayMSec','iRepeatMSec','iBounceMSec')){$d.$k=[uint32]$fkControls[$k].Value}
+  $bits=[uint32]0
+  foreach($spec in $fkFlagSpecs){if($fkFlags[$spec.Key].Checked){$bits=$bits -bor [uint32]$spec.Bit}}
+  $d.dwFlags=$bits
+  [TayFilterKeysNative]::Write($d)
+  $fkStatus.Text='Applied. Windows may normalize unsupported timings.'
+  LoadFilterKeysUI
+  Log 'FilterKeys Pro settings saved via SystemParametersInfo.'
+ }catch{[System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'FilterKeys apply error')|Out-Null}
+} | Out-Null
+PageButton $filterTab 'Restore original settings' 24 511 {
+ try {
+  $backup=Join-Path $env:APPDATA 'TayTweaks\FilterKeys-original.json'
+  if(-not(Test-Path $backup)){throw 'No backup found yet.'}
+  $old=Get-Content -LiteralPath $backup -Raw|ConvertFrom-Json
+  $d=[TayFilterKeysNative]::Read()
+  foreach($k in @('dwFlags','iWaitMSec','iDelayMSec','iRepeatMSec','iBounceMSec')){$d.$k=[uint32]$old.$k}
+  [TayFilterKeysNative]::Write($d);LoadFilterKeysUI
+  Log 'Restored original FilterKeys settings.'
+ }catch{[System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'FilterKeys restore error')|Out-Null}
+} | Out-Null
+PageButton $filterTab 'Windows keyboard accessibility' 390 511 {Start-Process 'ms-settings:easeofaccess-keyboard'} | Out-Null
+try{LoadFilterKeysUI}catch{$fkStatus.Text='Could not read settings: '+$_.Exception.Message}
+
 $tcpTab.AutoScroll=$true
 PageLabel $tcpTab 'TCP / NETWORK DIAGNOSTICS' 24 16 | Out-Null
 PageLabel $tcpTab 'No universal TCP tweak guarantees lower ping. These tools show and restore supported Windows settings.' 24 55 | Out-Null
@@ -424,7 +519,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'6.0.0';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'6.1.0';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
