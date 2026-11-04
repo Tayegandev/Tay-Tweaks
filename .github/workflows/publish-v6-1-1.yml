@@ -19,7 +19,7 @@ jobs:
       - name: Checkout v6.1.1 source
         uses: actions/checkout@v4
         with:
-          ref: v6.1.1.1-filterkeys-hotfix
+          ref: v6.1.1-filterkeys-hotfix
           path: source
       - name: Checkout stable manifest
         uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release create v6.1.1 source/TayTweaks.exe source/TayUpdater.ps1 source/TayTweaks.ico --repo ${{ github.repository }} --target v6.1.1.1-filterkeys-hotfix --title 'Tay-Tweaks v6.1.1' --notes 'v6.1.1 adds FilterKeys Pro, the custom Tay-Tweaks icon and an updated window title. Includes a backup/restore option for FilterKeys settings. Test the app on your system before applying new keyboard timings.'
+          gh release create v6.1.1 source/TayTweaks.exe source/TayUpdater.ps1 source/TayTweaks.ico --repo ${{ github.repository }} --target v6.1.1-filterkeys-hotfix --title 'Tay-Tweaks v6.1.1' --notes 'v6.1.1 adds FilterKeys Pro, the custom Tay-Tweaks icon and an updated window title. Includes a backup/restore option for FilterKeys settings. Test the app on your system before applying new keyboard timings.'
       - name: Update stable latest.json
         shell: pwsh
         run: |
