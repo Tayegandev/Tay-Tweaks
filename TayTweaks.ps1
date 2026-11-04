@@ -214,8 +214,6 @@ $inputTab=Tab "Keyboard / Input"
 $filterTab=Tab "FilterKeys Pro"
 $tcpTab=Tab "TCP / Network"
 $settingsTab=Tab "Settings"
-$hardwareTab=Tab "Hardware Intelligence"
-$benchTab=Tab "Tay Bench"
 # Display Manager: supported modes only; custom requests must match a driver-advertised mode.
 $displayTab=Tab "Display Manager";$displayTab.AutoScroll=$true
 Add-Type -TypeDefinition @'
@@ -255,7 +253,7 @@ $dmMode=New-Object Windows.Forms.ComboBox;$dmMode.DropDownStyle='DropDownList';$
 [void](DMLabel 'Width' 24 203 110);[void](DMLabel 'Height' 175 203 110);[void](DMLabel 'Refresh rate' 325 203 180)
 $dmW=New-Object Windows.Forms.NumericUpDown;$dmW.Minimum=320;$dmW.Maximum=7680;$dmW.Value=1280;$dmW.Location=[Drawing.Point]::new(24,238);$dmW.Width=120;$displayTab.Controls.Add($dmW)
 $dmH=New-Object Windows.Forms.NumericUpDown;$dmH.Minimum=200;$dmH.Maximum=4320;$dmH.Value=720;$dmH.Location=[Drawing.Point]::new(175,238);$dmH.Width=120;$displayTab.Controls.Add($dmH)
-$dmHz=New-Object Windows.Forms.ComboBox;$dmHz.DropDownStyle='DropDownList';$dmHz.Location=[Drawing.Point]::new(325,238);$dmHz.Width=140;$displayTab.Controls.Add($dmHz)
+$dmHz=New-Object Windows.Forms.NumericUpDown;$dmHz.Minimum=1;$dmHz.Maximum=240;$dmHz.Increment=1;$dmHz.Value=60;$dmHz.Location=[Drawing.Point]::new(325,238);$dmHz.Width=140;$displayTab.Controls.Add($dmHz)
 [void](DMLabel 'Custom resolution requests must already be driver-advertised. Unsupported modes are blocked.' 24 286)
 $dmStatus=DMLabel 'Ready.' 24 328
 $dmRefresh=New-Object Windows.Forms.Button;$dmRefresh.Text='Refresh modes';$dmRefresh.Location=[Drawing.Point]::new(24,380);$dmRefresh.Size=[Drawing.Size]::new(150,38);$displayTab.Controls.Add($dmRefresh)
@@ -265,16 +263,15 @@ function DMRefresh {
  try{
   $old=[TayDisplay]::Current();$dmCurrent.Text="Current: $($old.dmPelsWidth) x $($old.dmPelsHeight) @ $($old.dmDisplayFrequency) Hz"
   $script:DMModes=@();$seen=@{}
-  for($i=0;$i -lt 4096;$i++){
+  for($i=0;$i -lt 2048;$i++){
    $d=[TayDisplay]::Blank();if(-not [TayDisplay]::EnumDisplaySettings($null,$i,[ref]$d)){break}
    if($d.dmBitsPerPel -lt 24){continue}
    $key="$($d.dmPelsWidth)x$($d.dmPelsHeight)@$($d.dmDisplayFrequency)"
    if(-not $seen.ContainsKey($key)){$seen[$key]=$true;$script:DMModes+=,$d}
   }
-  $dmHz.Items.Clear()
-  foreach($hz in @($script:DMModes | ForEach-Object {$_.dmDisplayFrequency} | Sort-Object -Unique)){[void]$dmHz.Items.Add([string]$hz)}
-  if($dmHz.Items.Contains([string]$old.dmDisplayFrequency)){$dmHz.SelectedItem=[string]$old.dmDisplayFrequency}
-  elseif($dmHz.Items.Count){$dmHz.SelectedIndex=0}
+  $dmHz.Maximum=[decimal][math]::Max(240,[int]$old.dmDisplayFrequency)
+  $dmHz.Value=[decimal][math]::Max(1,[int]$old.dmDisplayFrequency)
+  $dmStatus.Text=if($script:DMModes.Count -eq 0){'No driver-advertised modes found. Check your GPU driver.'}else{"$($script:DMModes.Count) modes found. Type a refresh rate or choose a supported mode."}
   $dmW.Value=[decimal][Math]::Max(320,[Math]::Min(7680,[int]$old.dmPelsWidth))
   $dmH.Value=[decimal][Math]::Max(200,[Math]::Min(4320,[int]$old.dmPelsHeight))
   DMFillModes
@@ -295,7 +292,7 @@ $dmMode.Add_SelectedIndexChanged({
   $d=$script:DMModes[$dmMode.SelectedIndex]
   $dmW.Value=[decimal][Math]::Max(320,[Math]::Min(7680,[int]$d.dmPelsWidth))
   $dmH.Value=[decimal][Math]::Max(200,[Math]::Min(4320,[int]$d.dmPelsHeight))
-  if($dmHz.Items.Contains([string]$d.dmDisplayFrequency)){$dmHz.SelectedItem=[string]$d.dmDisplayFrequency}
+  $dmHz.Maximum=[decimal][math]::Max([int]$dmHz.Maximum,[int]$d.dmDisplayFrequency);$dmHz.Value=[decimal][math]::Max(1,[int]$d.dmDisplayFrequency)
  }elseif($dmKind.SelectedIndex -eq 1){
   $p=([string]$dmMode.SelectedItem).Split('x');$dmW.Value=[decimal][int]$p[0];$dmH.Value=[decimal][int]$p[1]
  }
@@ -306,8 +303,8 @@ $dmApply.Add_Click({
  try{
   $old=[TayDisplay]::Current()
   $w=[uint32][int]$dmW.Value;$h=[uint32][int]$dmH.Value
-  if($null -eq $dmHz.SelectedItem){throw 'Select a refresh rate.'}
-  $hz=[uint32][int]([string]$dmHz.SelectedItem);$target=$null
+
+  $hz=[uint32][int]$dmHz.Value;$target=$null
   foreach($d in $script:DMModes){if($d.dmPelsWidth -eq $w -and $d.dmPelsHeight -eq $h -and $d.dmDisplayFrequency -eq $hz){$target=$d;break}}
   if($null -eq $target){throw "Unsupported mode: $w x $h @ $hz Hz. Your driver must advertise the mode before Windows can apply it."}
   $test=[TayDisplay]::Test($target);if($test -ne 0){throw "Windows mode test failed: $test"}
@@ -495,10 +492,10 @@ $usageChart.Add_Paint({param($sender,$e)
 })
 $usageChartChoice.Add_SelectedIndexChanged({$usageChart.Invalidate()})
 $usageInfo=New-Object System.Windows.Forms.Label;$usageInfo.Location=[System.Drawing.Point]::new(565,278);$usageInfo.Size=[System.Drawing.Size]::new(270,228);$usageInfo.BackColor=[System.Drawing.Color]::FromArgb(23,18,18);$usageInfo.ForeColor=[System.Drawing.Color]::Gainsboro;$usageInfo.Font=New-Object System.Drawing.Font('Segoe UI',10);$usageInfo.Padding=New-Object System.Windows.Forms.Padding(12);$usageInfo.Text='SYSTEM INFO';$usageTab.Controls.Add($usageInfo)
-try{$cpuName=(Get-CimInstance Win32_Processor -ErrorAction Stop|Select-Object -First 1 -ExpandProperty Name);$gpuName=(Get-CimInstance Win32_VideoController -ErrorAction Stop|Select-Object -First 1 -ExpandProperty Name);$usageInfo.Text="SYSTEM INFO`r`n`r`nCPU: $cpuName`r`n`r`nGPU: $gpuName`r`n`r`nRAM: Detecting...`r`n`r`nOS: $([Environment]::OSVersion.VersionString)"}catch{$usageInfo.Text='System information unavailable'}
+$usageInfo.Text='SYSTEM INFO`r`n`r`nOpen Task Manager for CPU/GPU device details.`r`n`r`nUsage sampling runs only while this page is visible.'
 $usageFoot=New-Object System.Windows.Forms.Label;$usageFoot.Text='Live readings depend on Windows drivers. Missing temperature sensors display N/A rather than an estimated value.';$usageFoot.Location=[System.Drawing.Point]::new(18,519);$usageFoot.Size=[System.Drawing.Size]::new(800,42);$usageFoot.ForeColor=[System.Drawing.Color]::Silver;$usageTab.Controls.Add($usageFoot)
 $usageTab.AutoScrollMinSize=[System.Drawing.Size]::new(850,570)
-function SetUsageReading([string]$key,[int]$value,[string]$description){$script:usageGaugeValues[$key]=[math]::Max(0,[math]::Min(100,$value));$script:usageAvailable[$key]=$true;$usageLabels[$key].Text=$description;$usageGaugePanels[$key].Invalidate();$series=switch($key){'cpu'{'CPU'}'gpu'{'GPU'}'ram'{'RAM'}default{''}};if($series){$hist=$script:usageHistory[$series];[void]$hist.Add($value);if($hist.Count -gt 80){$hist.RemoveAt(0)};$usageChart.Invalidate()}}
+function SetUsageReading([string]$key,[int]$value,[string]$description){$script:usageGaugeValues[$key]=[math]::Max(0,[math]::Min(100,$value));$script:usageAvailable[$key]=$true;$usageLabels[$key].Text=$description;$usageGaugePanels[$key].Invalidate();$series=switch($key){'cpu'{'CPU'}'gpu'{'GPU'}'ram'{'RAM'}default{''}};if($series){$hist=$script:usageHistory[$series];[void]$hist.Add($value);if($hist.Count -gt 80){$hist.RemoveAt(0)}}}
 $script:cpuCounter=$null;$script:memCounter=$null;$script:gpuCounters=@();$script:totalMemoryGB=0.0;$script:lastTempCheck=[datetime]::MinValue
 try{$script:cpuCounter=[System.Diagnostics.PerformanceCounter]::new("Processor","% Processor Time","_Total");[void]$script:cpuCounter.NextValue()}catch{}
 try{$script:memCounter=[System.Diagnostics.PerformanceCounter]::new("Memory","Available MBytes");[void]$script:memCounter.NextValue()}catch{}
@@ -508,9 +505,9 @@ function UpdateUsage {
  try {if($script:cpuCounter){$n=[int][math]::Max(0,[math]::Min(100,$script:cpuCounter.NextValue()));SetUsageReading 'cpu' $n "$n% usage"}else{$usageLabels['cpu'].Text='N/A'}}catch{$usageLabels['cpu'].Text='N/A'}
  try {if($script:memCounter -and $script:totalMemoryGB -gt 0){$freeMB=[double]$script:memCounter.NextValue();$usedGB=[math]::Max(0,$script:totalMemoryGB-($freeMB/1024));$pct=[int][math]::Max(0,[math]::Min(100,(100*$usedGB/$script:totalMemoryGB)));SetUsageReading 'ram' $pct ("{0:N1} / {1:N1} GB" -f $usedGB,$script:totalMemoryGB)}else{$usageLabels['ram'].Text='N/A'}}catch{$usageLabels['ram'].Text='N/A'}
  try {if($script:gpuCounters.Count -gt 0){$sum=0.0;foreach($gc in $script:gpuCounters){try{$sum += [math]::Max(0,$gc.NextValue())}catch{}};$n=[int][math]::Max(0,[math]::Min(100,$sum));SetUsageReading 'gpu' $n "$n% 3D (approx.)"}else{$usageLabels['gpu'].Text='N/A (driver)'}}catch{$usageLabels['gpu'].Text='N/A (driver)'}
- $usageLabels['cputemp'].Text='Sensor unavailable';$script:usageAvailable['cputemp']=$false;$usageGaugePanels['cputemp'].Invalidate()
+ $usageLabels['cputemp'].Text='Sensor unavailable';$script:usageAvailable['cputemp']=$false;if($tabs.SelectedTab -eq $usageTab){$usageChart.Invalidate()}
 }
-$usageTimer=New-Object System.Windows.Forms.Timer;$usageTimer.Interval=500;$usageTimer.Add_Tick({UpdateUsage});$usageTab.Add_Enter({UpdateUsage;$usageTimer.Start()});$usageTab.Add_Leave({$usageTimer.Stop()});UpdateUsage
+$usageTimer=New-Object System.Windows.Forms.Timer;$usageTimer.Interval=1200;$usageTimer.Add_Tick({UpdateUsage});$usageTab.Add_Enter({UpdateUsage;$usageTimer.Start()});$usageTab.Add_Leave({$usageTimer.Stop()})
 
 
 # User settings and color themes
@@ -526,7 +523,6 @@ function ApplyTheme {
  foreach($page in @($tabs.TabPages)){ColorChildren $page}
  foreach($b in $nav.Controls){if($b -is [System.Windows.Forms.Button]){$b.ForeColor=$fg;$b.BackColor=if($light){[System.Drawing.Color]::White}else{[System.Drawing.Color]::FromArgb(32,25,28)}}}
  foreach($b in @($apply,$restore,$undo,$logs,$exit)){$b.BackColor=$accent}
- if($hardwareResults){$hardwareResults.BackColor=if($light){[System.Drawing.Color]::White}else{[System.Drawing.Color]::FromArgb(27,25,30)};$hardwareResults.ForeColor=$fg}
  $usageIntro.ForeColor=$accent
  $surface=if($light){[System.Drawing.Color]::White}else{[System.Drawing.Color]::FromArgb(23,20,25)}
  $usageChart.BackColor=$surface;$usageInfo.BackColor=$surface;$usageInfo.ForeColor=$fg
@@ -661,58 +657,13 @@ PageButton $tcpTab 'View network configuration' 24 153 {ShowOutput 'IP configura
 PageButton $tcpTab 'Restore TCP autotuning to normal' 390 153 {if([System.Windows.Forms.MessageBox]::Show('Restore TCP receive window autotuning to Windows normal?','TCP','YesNo') -eq 'Yes'){try{$out=& netsh.exe int tcp set global autotuninglevel=normal 2>&1|Out-String;if($LASTEXITCODE -ne 0){throw $out};ShowOutput 'TCP restored' $out}catch{ShowOutput 'TCP error' $_.Exception.Message}}} | Out-Null
 PageButton $tcpTab 'Open network troubleshooting' 24 206 {Start-Process 'ms-settings:network-status'} | Out-Null
 PageLabel $tcpTab 'Avoid arbitrary MTU, TCP ACK, congestion-control or Nagle edits without testing: they can worsen connection quality.' 24 266 | Out-Null
-# Hardware intelligence: capability-aware inventory, read-only until the user chooses a setting.
-PageLabel $hardwareTab 'TAY HARDWARE INTELLIGENCE  /  v6.0' 24 18 | Out-Null
-PageLabel $hardwareTab 'Detect components and driver capabilities. Unsupported controls are not displayed as working overclocks.' 24 54 | Out-Null
-$hardwareResults=New-Object System.Windows.Forms.TextBox
-$hardwareResults.Multiline=$true;$hardwareResults.ReadOnly=$true;$hardwareResults.ScrollBars='Vertical'
-$hardwareResults.Font=New-Object System.Drawing.Font('Consolas',10)
-$hardwareResults.Location=[System.Drawing.Point]::new(24,146);$hardwareResults.Size=[System.Drawing.Size]::new(800,390)
-$hardwareResults.BackColor=[System.Drawing.Color]::FromArgb(27,25,30);$hardwareResults.ForeColor=[System.Drawing.Color]::Gainsboro
-$hardwareTab.Controls.Add($hardwareResults)
-PageButton $hardwareTab 'Scan this PC' 24 99 {
- try {
-  $cpus=@(Get-CimInstance Win32_Processor -ErrorAction Stop)
-  $gpus=@(Get-CimInstance Win32_VideoController -ErrorAction Stop)
-  $ram=@(Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue)
-  $board=Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue | Select-Object -First 1
-  $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
-  $disks=@(Get-CimInstance Win32_DiskDrive -ErrorAction SilentlyContinue)
-  $lines=New-Object System.Collections.Generic.List[string]
-  $lines.Add('CPU');foreach($c in $cpus){$lines.Add("  $($c.Name.Trim()) | $($c.NumberOfCores) cores / $($c.NumberOfLogicalProcessors) threads | reported max $($c.MaxClockSpeed) MHz (may be base clock)")}
-  $lines.Add('');$lines.Add('GPU');foreach($g in $gpus){$lines.Add("  $($g.Name) | driver $($g.DriverVersion) | adapter RAM reported: $($g.AdapterRAM) bytes")}
-  $lines.Add('');$lines.Add('RAM');$lines.Add("  Total physical memory: $([math]::Round(($ram | Measure-Object Capacity -Sum).Sum/1GB,2)) GB")
-  foreach($m in $ram){$lines.Add("  $($m.Manufacturer) $([math]::Round($m.Capacity/1GB,1)) GB | $($m.Speed) MT/s (reported)")}
-  $lines.Add('');$lines.Add("Motherboard: $($board.Manufacturer) $($board.Product)")
-  $lines.Add("Windows: $($os.Caption) | build $($os.BuildNumber)")
-  $lines.Add('');$lines.Add('STORAGE');foreach($d in $disks){$lines.Add("  $($d.Model) | $([math]::Round($d.Size/1GB)) GB | $($d.InterfaceType)")}
-  $lines.Add('');$lines.Add('TUNING CAPABILITIES');$lines.Add('  Frequency / voltage controls: not assumed; require verified vendor support.')
-  $lines.Add('  Thermal and emergency protections: always retained.')
-  $lines.Add('  No hardware frequency changes are performed by this scan.')
-  $hardwareResults.Text=$lines -join "`r`n"
- } catch {$hardwareResults.Text="Hardware scan failed: $($_.Exception.Message)";Log "Hardware scan: $($_.Exception.Message)"}
-} | Out-Null
-PageLabel $benchTab 'TAY BENCH  /  v6.0' 24 18 | Out-Null
-PageLabel $benchTab 'Repeatable CPU microbenchmark. This is NOT an FPS or GPU benchmark.' 24 55 | Out-Null
-$benchResult=PageLabel $benchTab 'No benchmark run yet.' 24 154 780
-PageButton $benchTab 'Run CPU microbenchmark (~1 sec)' 24 102 {
- try {
-  $benchResult.Text='Running benchmark...';$form.Refresh()
-  $watch=[System.Diagnostics.Stopwatch]::StartNew();$iterations=0L;$checksum=0.0
-  while($watch.ElapsedMilliseconds -lt 1000){for($j=1;$j -le 2000;$j++){$checksum += [math]::Sqrt([double]($j+($iterations % 101)));if($checksum -gt 10000000){$checksum=0}};$iterations+=2000}
-  $watch.Stop();$rate=[math]::Round($iterations/($watch.Elapsed.TotalSeconds*1000000),2)
-  $benchResult.Text="CPU math throughput: $rate million iterations/sec. Run again under identical conditions to compare."
-  Log "TayBench: $rate million iterations/sec"
- }catch{$benchResult.Text="Benchmark failed: $($_.Exception.Message)"}
-} | Out-Null
-PageLabel $benchTab 'A higher score indicates faster execution of this specific test only. It does not predict gaming FPS.' 24 209 | Out-Null
 PageLabel $settingsTab 'SETTINGS / APPEARANCE' 24 18 | Out-Null
 PageLabel $settingsTab 'Choose a theme (saved automatically):' 24 64 | Out-Null
 $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle='DropDownList';$themePicker.Location=[System.Drawing.Point]::new(24,100);$themePicker.Size=[System.Drawing.Size]::new(280,30);$themePicker.Items.AddRange(@('Tay Orange','Crimson Red','Royal Purple','Neon Green','Ocean Blue','Midnight','Light','Pure White'));$themePicker.SelectedItem=$script:ThemeName;$settingsTab.Controls.Add($themePicker)
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'6.1.3';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'6.1.4';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
@@ -775,7 +726,7 @@ ToolButton $netTab "Renew DHCP address" "May briefly disconnect you; only use fo
  if($c -eq [System.Windows.Forms.DialogResult]::Yes){$o=(& ipconfig.exe /release 2>&1|Out-String);$o+="`r`n"+(& ipconfig.exe /renew 2>&1|Out-String);Log "DHCP renew requested.";ShowOutput "DHCP renew result" $o}
 }
 $about=New-Object System.Windows.Forms.Label;$about.Location=[System.Drawing.Point]::new(24,24);$about.Size=New-Object System.Drawing.Size(870,450);$about.Font=New-Object System.Drawing.Font("Segoe UI",11)
-$about.Text="TAY TWEAKS v6.1.3`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
+$about.Text="TAY TWEAKS v6.1.4`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
 $about.ForeColor=[System.Drawing.Color]::FromArgb(210,214,223);$aboutTab.Controls.Add($about)
 $status=New-Object System.Windows.Forms.Label;$status.Text="Ready • Administrator mode • Restore point required before tweaks";$status.Location=[System.Drawing.Point]::new(22,683);$status.Size=New-Object System.Drawing.Size(900,28);$status.Anchor="Bottom,Left,Right";$status.ForeColor=[System.Drawing.Color]::FromArgb(195,199,210);$form.Controls.Add($status)
 function BottomButton([string]$text,[int]$x,[int]$width){$b=New-Object System.Windows.Forms.Button;$b.Text=$text;$b.Location=[System.Drawing.Point]::new($x,720);$b.Size=New-Object System.Drawing.Size($width,44);$b.Anchor="Bottom,Left";$b.FlatStyle="Flat";$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(255,92,35);$b.ForeColor=[System.Drawing.Color]::FromArgb(20,20,24);$b.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold);$form.Controls.Add($b);return $b}
