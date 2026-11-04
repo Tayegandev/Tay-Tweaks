@@ -134,7 +134,7 @@ function ShowOutput([string]$title,[string]$content) {
 }
 function RunOutput([string]$title,[string]$cmd) { try {$o=& powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $cmd 2>&1|Out-String;ShowOutput $title $o} catch {ShowOutput $title $_.Exception.Message} }
 
-$form=New-Object System.Windows.Forms.Form;$form.Text="Tay Tweaks v5.2";$form.Size=New-Object System.Drawing.Size(1100,820);$form.MinimumSize=New-Object System.Drawing.Size(940,700);$form.StartPosition="CenterScreen";$form.WindowState="Normal";$form.MaximizeBox=$true;$form.MinimizeBox=$true;$form.BackColor=[System.Drawing.Color]::FromArgb(8,8,10);$form.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);$form.Font=New-Object System.Drawing.Font("Segoe UI",9)
+$form=New-Object System.Windows.Forms.Form;$form.Text="Tay-Tweaks";$form.Size=New-Object System.Drawing.Size(1100,820);$form.MinimumSize=New-Object System.Drawing.Size(940,700);$form.StartPosition="CenterScreen";$form.WindowState="Normal";$form.MaximizeBox=$true;$form.MinimizeBox=$true;$form.BackColor=[System.Drawing.Color]::FromArgb(8,8,10);$form.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);$form.Font=New-Object System.Drawing.Font("Segoe UI",9)
 $head=New-Object System.Windows.Forms.Panel;$head.Dock="Top";$head.Height=92;$head.BackColor=[System.Drawing.Color]::FromArgb(18,10,12);$form.Controls.Add($head)
 $ttl=New-Object System.Windows.Forms.Label;$ttl.Text="TAY TWEAKS";$ttl.Font=New-Object System.Drawing.Font("Segoe UI",22,[System.Drawing.FontStyle]::Bold);$ttl.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$ttl.Location=[System.Drawing.Point]::new(22,10);$ttl.AutoSize=$true;$head.Controls.Add($ttl)
 $sub=New-Object System.Windows.Forms.Label;$sub.Text="CPU  •  RAM  •  GPU  •  GAMING  •  WINDOWS  •  DIAGNOSTICS";$sub.ForeColor=[System.Drawing.Color]::FromArgb(190,195,207);$sub.Location=[System.Drawing.Point]::new(25,55);$sub.AutoSize=$true;$head.Controls.Add($sub)
@@ -519,5 +519,5 @@ $undo.Add_Click({
 $logs.Add_Click({New-Item -ItemType Directory -Path $DataDir -Force|Out-Null;Start-Process explorer.exe $DataDir})
 $exit.Add_Click({$usageTimer.Stop();$homeClockTimer.Stop();try{$script:cpuCounter.Dispose();$script:memCounter.Dispose();foreach($gc in $script:gpuCounters){$gc.Dispose()}}catch{};$form.Close()})
 ApplyTheme
-Log "Tay Tweaks v5.2 launched."
+Log "Tay-Tweaks launched."
 [void]$form.ShowDialog()
