@@ -1,0 +1,72 @@
+name: Publish Tay Tweaks v6.1.5
+on:
+  push:
+    branches: [v6.1.5-adaptive-hardware-network]
+    paths: ['.github/workflows/publish-v6-1-5.yml']
+permissions:
+  contents: write
+concurrency:
+  group: taytweaks-release-v615
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v6.1.5-adaptive-hardware-network
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: stable
+          persist-credentials: true
+      - name: Validate source and build EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($file in @('TayTweaks.ps1','TayUpdater.ps1','Build-TayTweaks-EXE.ps1')){
+            $tokens=$null;$errors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "source/$file"),[ref]$tokens,[ref]$errors)
+            if($errors.Count){throw "Syntax error in $file"}
+          }
+          $src=Get-Content source/TayTweaks.ps1 -Raw
+          if($src -notmatch '\$script:AppVersion=\[version\]''6\.1\.5'''){throw 'Version mismatch'}
+          Install-Module ps2exe -Scope CurrentUser -Force
+          & ./source/Build-TayTweaks-EXE.ps1
+          if(!(Test-Path source/TayTweaks.exe)){throw 'Missing built EXE'}
+          $hash=(Get-FileHash source/TayTweaks.exe -Algorithm SHA256).Hash
+          "TAY_HASH=$hash" >> $env:GITHUB_ENV
+          Compress-Archive -Path source/TayTweaks.exe,source/TayUpdater.ps1,source/TayTweaks.ico -DestinationPath TayTweaks-v6.1.5.zip -Force
+      - name: Publish release with full package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          gh release create v6.1.5 source/TayTweaks.exe source/TayUpdater.ps1 source/TayTweaks.ico TayTweaks-v6.1.5.zip --repo ${{ github.repository }} --target v6.1.5-adaptive-hardware-network --title 'Tay Tweaks v6.1.5' --notes 'Public Windows build. Includes 60 optional settings, driver-advertised Display Manager modes, CPU/GPU/driver/RAM detection and internet check. Hardware/UI behavior has not been independently tested on a user PC. Download the ZIP for a fresh installation; keep TayUpdater.ps1 beside the EXE. Display modes are validated and can be reverted. No performance improvement is guaranteed.'
+      - name: Verify release asset exists
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          gh release view v6.1.5 --repo ${{ github.repository }} --json assets --jq '.assets[].name' | Tee-Object -Variable names
+          if('TayTweaks.exe' -notin @($names)){throw 'Release EXE missing'}
+      - name: Update stable updater feed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $manifest=[ordered]@{
+            version='6.1.5'
+            download_url='https://github.com/${{ github.repository }}/releases/download/v6.1.5/TayTweaks.exe'
+            sha256=$env:TAY_HASH
+            changelog='https://github.com/${{ github.repository }}/releases/tag/v6.1.5'
+            mandatory=$false
+          }
+          $manifest | ConvertTo-Json | Set-Content stable/latest.json -Encoding utf8
+          git -C stable config user.name 'github-actions[bot]'
+          git -C stable config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C stable add latest.json
+          git -C stable commit -m 'release: publish v6.1.5 updater manifest'
+          git -C stable push origin HEAD:main
