@@ -527,7 +527,19 @@ $usageChart.Add_Paint({param($sender,$e)
 })
 $usageChartChoice.Add_SelectedIndexChanged({$usageChart.Invalidate()})
 $usageInfo=New-Object System.Windows.Forms.Label;$usageInfo.Location=[System.Drawing.Point]::new(565,278);$usageInfo.Size=[System.Drawing.Size]::new(270,228);$usageInfo.BackColor=[System.Drawing.Color]::FromArgb(23,18,18);$usageInfo.ForeColor=[System.Drawing.Color]::Gainsboro;$usageInfo.Font=New-Object System.Drawing.Font('Segoe UI',10);$usageInfo.Padding=New-Object System.Windows.Forms.Padding(12);$usageInfo.Text='SYSTEM INFO';$usageTab.Controls.Add($usageInfo)
-$usageInfo.Text="SYSTEM INFO`r`n`r`nOpen Task Manager for CPU/GPU device details.`r`n`r`nUsage sampling runs only while this page is visible."
+$usageInfo.Font=New-Object System.Drawing.Font('Segoe UI',8.5)
+$usageInfo.Text='SYSTEM INFO - Open Usage to detect hardware'
+$script:usageSpecsLoaded=$false
+function UpdateUsageSpecs {
+ if($script:usageSpecsLoaded){return}
+ $script:usageSpecsLoaded=$true
+ $cpuName='Unavailable';$gpuName='Unavailable';$ramName='Unavailable';$osName='Unavailable'
+ try{$cpu=Get-CimInstance Win32_Processor -ErrorAction Stop|Select-Object -First 1;if($cpu -and $cpu.Name){$cpuName=([string]$cpu.Name).Trim()}}catch{}
+ try{$gpu=Get-CimInstance Win32_VideoController -ErrorAction Stop|Where-Object {$_.Name}|Select-Object -First 1;if($gpu){$gpuName=([string]$gpu.Name).Trim()}}catch{}
+ try{$os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop;if($os){$osName=([string]$os.Caption).Trim();if($os.TotalVisibleMemorySize){$ramName=('{0:N1} GB' -f ([double]$os.TotalVisibleMemorySize/1MB))}}}catch{}
+ $usageInfo.Text="SYSTEM INFO`r`n`r`nCPU: $cpuName`r`n`r`nGPU: $gpuName`r`n`r`nRAM: $ramName`r`n`r`nOS: $osName"
+}
+
 $usageFoot=New-Object System.Windows.Forms.Label;$usageFoot.Text='Live readings depend on Windows drivers. Missing temperature sensors display N/A rather than an estimated value.';$usageFoot.Location=[System.Drawing.Point]::new(18,519);$usageFoot.Size=[System.Drawing.Size]::new(800,42);$usageFoot.ForeColor=[System.Drawing.Color]::Silver;$usageTab.Controls.Add($usageFoot)
 $usageTab.AutoScrollMinSize=[System.Drawing.Size]::new(850,570)
 function SetUsageReading([string]$key,[int]$value,[string]$description){$script:usageGaugeValues[$key]=[math]::Max(0,[math]::Min(100,$value));$script:usageAvailable[$key]=$true;$usageLabels[$key].Text=$description;$usageGaugePanels[$key].Invalidate();$series=switch($key){'cpu'{'CPU'}'gpu'{'GPU'}'ram'{'RAM'}default{''}};if($series){$hist=$script:usageHistory[$series];[void]$hist.Add($value);if($hist.Count -gt 80){$hist.RemoveAt(0)}}}
@@ -542,7 +554,7 @@ function UpdateUsage {
  try {if($script:gpuCounters.Count -gt 0){$sum=0.0;foreach($gc in $script:gpuCounters){try{$sum += [math]::Max(0,$gc.NextValue())}catch{}};$n=[int][math]::Max(0,[math]::Min(100,$sum));SetUsageReading 'gpu' $n "$n% 3D (approx.)"}else{$usageLabels['gpu'].Text='N/A (driver)'}}catch{$usageLabels['gpu'].Text='N/A (driver)'}
  $usageLabels['cputemp'].Text='Sensor unavailable';$script:usageAvailable['cputemp']=$false;if($tabs.SelectedTab -eq $usageTab){$usageChart.Invalidate()}
 }
-$usageTimer=New-Object System.Windows.Forms.Timer;$usageTimer.Interval=1200;$usageTimer.Add_Tick({UpdateUsage});$usageTab.Add_Enter({UpdateUsage;$usageTimer.Start()});$usageTab.Add_Leave({$usageTimer.Stop()})
+$usageTimer=New-Object System.Windows.Forms.Timer;$usageTimer.Interval=1200;$usageTimer.Add_Tick({UpdateUsage});$usageTab.Add_Enter({UpdateUsageSpecs;UpdateUsage;$usageTimer.Start()});$usageTab.Add_Leave({$usageTimer.Stop()})
 
 
 # User settings and color themes
@@ -698,7 +710,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'6.4';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'6.4.1';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
