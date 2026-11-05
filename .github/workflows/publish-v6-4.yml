@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: v6.4-adaptive-hardware-network
+          ref: v6.1.6-usage-text-hotfix
           path: source
       - uses: actions/checkout@v4
         with:
@@ -44,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference='Stop'
-          gh release create v6.4 source/TayTweaks.exe source/TayUpdater.ps1 source/TayTweaks.ico TayTweaks-v6.4.zip --repo ${{ github.repository }} --target v6.4-adaptive-hardware-network --title 'Tay Tweaks v6.4' --notes 'Usage System Info formatting hotfix and prior adaptive display/hardware features. Compiled by GitHub Actions. Not independently tested on a Windows PC. For a fresh install download the ZIP and keep TayUpdater.ps1 beside the EXE.'
+          gh release create v6.4 source/TayTweaks.exe source/TayUpdater.ps1 source/TayTweaks.ico TayTweaks-v6.4.zip --repo ${{ github.repository }} --target v6.1.6-usage-text-hotfix --title 'Tay Tweaks v6.4' --notes 'Usage System Info formatting hotfix and prior adaptive display/hardware features. Compiled by GitHub Actions. Not independently tested on a Windows PC. For a fresh install download the ZIP and keep TayUpdater.ps1 beside the EXE.'
       - name: Verify release asset exists
         shell: pwsh
         env:
