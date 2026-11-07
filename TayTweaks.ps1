@@ -879,14 +879,16 @@ $script:TayScrollers=New-Object System.Collections.ArrayList
 function UpdateTayScrollbar($entry) {
  try{
   $target=$entry.Target;$track=$entry.Track;$thumb=$entry.Thumb
-  if($target.IsDisposed -or -not $target.IsHandleCreated){return}
+  if($target.IsDisposed -or -not $target.IsHandleCreated){$track.Visible=$false;return}
+  if(-not $target.Visible){$track.Visible=$false;return}
   $client=[math]::Max(1,$target.ClientSize.Height)
   $content=[math]::Max([int]$target.AutoScrollMinSize.Height,[int]$target.DisplayRectangle.Height)
   $maximum=[math]::Max(0,$content-$client)
   if($maximum -lt 8){$track.Visible=$false;return}
   $track.Visible=$true
   $track.Height=[math]::Max(36,$client-12)
-  $track.Location=[Drawing.Point]::new(($target.ClientSize.Width-12),([math]::Max(0,-$target.AutoScrollPosition.Y)+6))
+  $origin=$form.PointToClient($target.PointToScreen([Drawing.Point]::new(0,0)))
+  $track.Location=[Drawing.Point]::new(($origin.X+$target.ClientSize.Width-12),($origin.Y+6))
   $size=[math]::Max(25,[int]($track.Height*$client/[math]::Max($content,1)))
   $thumb.Height=[math]::Min($track.Height,$size)
   if(-not $entry.Dragging){
@@ -906,7 +908,7 @@ function AddTayScrollbar($target){
  $track.BackColor=[Drawing.Color]::FromArgb(46,43,67);$track.Tag='TaySlimScrollTrack'
  $thumb=New-Object Windows.Forms.Panel;$thumb.Size=[Drawing.Size]::new(7,28)
  $thumb.BackColor=[Drawing.Color]::FromArgb(144,95,255);$thumb.Cursor=[Windows.Forms.Cursors]::Hand
- $track.Controls.Add($thumb);$target.Controls.Add($track);$track.BringToFront()
+ $track.Controls.Add($thumb);$track.Visible=$false;$form.Controls.Add($track);$track.BringToFront()
  $entry=[pscustomobject]@{Target=$target;Track=$track;Thumb=$thumb;Dragging=$false;GrabY=0}
  [void]$script:TayScrollers.Add($entry)
  $thumb.Add_MouseDown({param($sender,$e)
