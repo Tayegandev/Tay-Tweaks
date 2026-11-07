@@ -566,13 +566,17 @@ function ApplyTheme {
     $secondary=($control.Text -match '(Restore|Undo|Exit|Cancel|Logs|Normal|Back|Reset)')
     $control.BackColor=if($secondary){$surface}else{$accent}
     $control.ForeColor=if($secondary){$fg}else{[Drawing.Color]::FromArgb(18,18,28)}
-    if($control.Height -ge 25){SetTayRounded $control 9}
+    if($control.Height -ge 25){SetTayRounded $control 12}
    }elseif($control -is [Windows.Forms.Label]){
     if($control -ne $ttl -and $control -ne $sub){$control.ForeColor=$fg}
    }elseif($control -is [Windows.Forms.Panel] -and $control.Tag -eq 'TayCard'){
     $control.BackColor=$surface;SetTayRounded $control 17
    }elseif($control -is [Windows.Forms.ComboBox]){
-    $control.BackColor=$surface;$control.ForeColor=$fg;$control.FlatStyle='Flat'
+    $control.BackColor=$surface;$control.ForeColor=$fg;$control.FlatStyle='Flat';SetTayRounded $control 7
+   }elseif($control -is [Windows.Forms.TextBox]){
+    $control.BackColor=$surface;$control.ForeColor=$fg;$control.BorderStyle='FixedSingle';if(-not $control.Multiline){SetTayRounded $control 7}
+   }elseif($control -is [Windows.Forms.NumericUpDown]){
+    $control.BackColor=$surface;$control.ForeColor=$fg
    }elseif($control -is [Windows.Forms.CheckBox]){
     $control.ForeColor=$fg
    }
@@ -826,6 +830,48 @@ $undo.Add_Click({
 $logs.Add_Click({New-Item -ItemType Directory -Path $DataDir -Force|Out-Null;Start-Process explorer.exe $DataDir})
 $exit.Add_Click({if($slimScrollTimer){$slimScrollTimer.Stop()};$usageTimer.Stop();$specPoll.Stop();if($script:specJob){Remove-Job -Job $script:specJob -Force -ErrorAction SilentlyContinue};$homeClockTimer.Stop();try{$script:cpuCounter.Dispose();$script:memCounter.Dispose();foreach($gc in $script:gpuCounters){$gc.Dispose()}}catch{};$form.Close()})
 ApplyTheme
+
+# Adaptive dashboard grid: three equal metric cards, then System / Activity cards.
+function SetTayDashboardLayout {
+ if(-not $usageTab -or $usageTab.IsDisposed){return}
+ $w=[math]::Max(835,$usageTab.ClientSize.Width-8)
+ $gap=12;$margin=14;$cardW=[int][math]::Floor(($w-2*$margin-2*$gap)/3)
+ foreach($pair in @(@('cpu',0),@('gpu',1),@('ram',2))){
+  $card=$usageGaugePanels[[string]$pair[0]];$card.Width=$cardW
+  $card.Left=$margin+([int]$pair[1]*($cardW+$gap))
+ }
+ $sysW=[int][math]::Floor(($w-2*$margin-$gap)*0.39)
+ $usageInfo.Left=$margin;$usageInfo.Width=$sysW
+ $usageChart.Left=$margin+$sysW+$gap
+ $usageChart.Width=$w-2*$margin-$gap-$sysW
+ $usageChartChoice.Left=[math]::Max(215,$usageChart.Width-128)
+ foreach($k in @('CPU','GPU','MEMORY','OS')){$script:specLabels[$k].Width=[math]::Max(100,$sysW-38)}
+ $usageChart.Invalidate()
+}
+$usageTab.Add_SizeChanged({SetTayDashboardLayout})
+$script:TayCardBorder={
+ param($sender,$e)
+ if($sender.Width -lt 16 -or $sender.Height -lt 16){return}
+ $accent=[Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName])
+ $pen=New-Object Drawing.Pen([Drawing.Color]::FromArgb(70,$accent.R,$accent.G,$accent.B),1)
+ $e.Graphics.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
+ $rect=[Drawing.Rectangle]::new(1,1,($sender.Width-3),($sender.Height-3))
+ $path=New-Object Drawing.Drawing2D.GraphicsPath
+ $d=26
+ $path.AddArc($rect.Left,$rect.Top,$d,$d,180,90)
+ $path.AddArc(($rect.Right-$d),$rect.Top,$d,$d,270,90)
+ $path.AddArc(($rect.Right-$d),($rect.Bottom-$d),$d,$d,0,90)
+ $path.AddArc($rect.Left,($rect.Bottom-$d),$d,$d,90,90)
+ $path.CloseFigure();$e.Graphics.DrawPath($pen,$path)
+ $pen.Dispose();$path.Dispose()
+}
+foreach($panel in @($usageInfo,$usageChart)+@($usageGaugePanels.Values)){$panel.Add_Paint($script:TayCardBorder)}
+$form.Add_Shown({
+ $form.MaximizedBounds=[Windows.Forms.Screen]::FromControl($form).WorkingArea
+ SetTayDashboardLayout
+ $resizeGrip.BringToFront()
+})
+$frameMax.Add_Click({$form.MaximizedBounds=[Windows.Forms.Screen]::FromControl($form).WorkingArea})
 
 # Thin theme-aware scrollbar overlay for long WinForms pages. The underlying
 # AutoScroll model is retained for wheel/keyboard navigation; native bars are hidden.
