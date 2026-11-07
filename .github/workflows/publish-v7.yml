@@ -1,0 +1,74 @@
+name: Publish Tay Tweaks v7.0
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-v6-4-1.yml']
+permissions:
+  contents: write
+concurrency:
+  group: taytweaks-release-v70
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v7.0-restore-usage-specs
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: stable
+          persist-credentials: true
+      - name: Validate source and build EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($file in @('TayTweaks.ps1','TayUpdater.ps1','Build-TayTweaks-EXE.ps1')){
+            $tokens=$null;$errors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "source/$file"),[ref]$tokens,[ref]$errors)
+            if($errors.Count){throw "Syntax error in $file"}
+          }
+          $src=Get-Content source/TayTweaks.ps1 -Raw
+          if($src -notmatch '\$script:AppVersion=\[version\]''7\.0'''){throw 'Version mismatch'}
+          if($src -match 'Tab "Display Manager"'){throw 'Display Manager page must not ship in v7'}
+          if($src -notmatch 'function UpdateUsageSpecs'){throw 'Missing hardware detection'}
+          Install-Module ps2exe -Scope CurrentUser -Force
+          & ./source/Build-TayTweaks-EXE.ps1
+          if(!(Test-Path source/TayTweaks.exe)){throw 'Missing built EXE'}
+          $hash=(Get-FileHash source/TayTweaks.exe -Algorithm SHA256).Hash
+          "TAY_HASH=$hash" >> $env:GITHUB_ENV
+          Compress-Archive -Path source/TayTweaks.exe,source/TayUpdater.ps1,source/TayTweaks.ico -DestinationPath TayTweaks-v7.0.zip -Force
+      - name: Publish release with full package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          gh release create v7.0 source/TayTweaks.exe source/TayUpdater.ps1 source/TayTweaks.ico TayTweaks-v7.0.zip --repo ${{ github.repository }} --target v7.0-restore-usage-specs --title 'Tay Tweaks v7.0' --notes 'Major UI refresh inspired by the supplied reference: dark/navy rounded panels, live CPU GPU RAM cards, asynchronous CPU GPU RAM OS detection, adjustable themes, and Display Manager removed. Existing opt-in tweak catalogue, rollback, presets, update system and other pages are preserved. Compiled by GitHub Actions. Not independently tested on a Windows PC. For a fresh install download the ZIP and keep TayUpdater.ps1 beside the EXE.'
+      - name: Verify release asset exists
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          gh release view v7.0 --repo ${{ github.repository }} --json assets --jq '.assets[].name' | Tee-Object -Variable names
+          if('TayTweaks.exe' -notin @($names)){throw 'Release EXE missing'}
+      - name: Update stable updater feed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $manifest=[ordered]@{
+            version='7.0'
+            download_url='https://github.com/${{ github.repository }}/releases/download/v7.0/TayTweaks.exe'
+            sha256=$env:TAY_HASH
+            changelog='https://github.com/${{ github.repository }}/releases/tag/v7.0'
+            mandatory=$false
+          }
+          $manifest | ConvertTo-Json | Set-Content stable/latest.json -Encoding utf8
+          git -C stable config user.name 'github-actions[bot]'
+          git -C stable config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C stable add latest.json
+          git -C stable commit -m 'release: publish v7.0 updater manifest'
+          git -C stable push origin HEAD:main
