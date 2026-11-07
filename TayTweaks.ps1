@@ -314,8 +314,8 @@ AdvButton 'Open Game Mode settings' 408 466 {Start-Process 'ms-settings:gaming-g
 $advancedTab.AutoScrollMinSize=[System.Drawing.Size]::new(810,550)
 # Sidebar navigation replaces the default horizontal tab strip.
 $tabs.Appearance='FlatButtons';$tabs.ItemSize=[System.Drawing.Size]::new(0,1);$tabs.SizeMode='Fixed'
-$tabs.Location=[System.Drawing.Point]::new(204,94);$tabs.Size=[System.Drawing.Size]::new(917,608)
-$nav=New-Object System.Windows.Forms.Panel;$nav.Location=[System.Drawing.Point]::new(0,84);$nav.Size=[System.Drawing.Size]::new(194,620);$nav.AutoScroll=$true;$nav.Anchor='Top,Bottom,Left';$nav.BackColor=[System.Drawing.Color]::FromArgb(21,17,20);$form.Controls.Add($nav)
+$tabs.Location=[System.Drawing.Point]::new(204,94);$tabs.Size=[System.Drawing.Size]::new(917,572)
+$nav=New-Object System.Windows.Forms.Panel;$nav.Location=[System.Drawing.Point]::new(0,84);$nav.Size=[System.Drawing.Size]::new(194,590);$nav.AutoScroll=$true;$nav.Anchor='Top,Bottom,Left';$nav.BackColor=[System.Drawing.Color]::FromArgb(21,17,20);$form.Controls.Add($nav)
 $navY=12
 foreach($page in @($tabs.TabPages)){
  $b=New-Object System.Windows.Forms.Button;$b.Text='  '+$page.Text;$b.Tag=$page;$b.TextAlign='MiddleLeft';$b.Location=[System.Drawing.Point]::new(8,$navY);$b.Size=[System.Drawing.Size]::new(175,39);$b.FlatStyle='Flat';$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(32,25,28);$b.ForeColor=[System.Drawing.Color]::FromArgb(255,142,75);$b.Font=New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold);$b.Add_Click({$tabs.SelectedTab=$this.Tag});$nav.Controls.Add($b);$navY+=45
