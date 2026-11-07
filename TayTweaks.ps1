@@ -824,7 +824,80 @@ $undo.Add_Click({
  try{$s=Get-Content $BackupFile -Raw|ConvertFrom-Json;UndoSnapshot @($s.Snapshot);Log "Last session undone.";Remove-Item $AppliedFile -Force -ErrorAction SilentlyContinue;$homePrevious.Text="PREVIOUSLY APPLIED / SELECTED`r`nLast session was undone."; $status.Text="Previous registry values restored.";[System.Windows.Forms.MessageBox]::Show("Previous registry values restored. Restart if needed.","Tay Tweaks")|Out-Null}catch{[System.Windows.Forms.MessageBox]::Show("Undo failed: $($_.Exception.Message)","Tay Tweaks")|Out-Null}
 })
 $logs.Add_Click({New-Item -ItemType Directory -Path $DataDir -Force|Out-Null;Start-Process explorer.exe $DataDir})
-$exit.Add_Click({$usageTimer.Stop();$specPoll.Stop();if($script:specJob){Remove-Job -Job $script:specJob -Force -ErrorAction SilentlyContinue};$homeClockTimer.Stop();try{$script:cpuCounter.Dispose();$script:memCounter.Dispose();foreach($gc in $script:gpuCounters){$gc.Dispose()}}catch{};$form.Close()})
+$exit.Add_Click({if($slimScrollTimer){$slimScrollTimer.Stop()};$usageTimer.Stop();$specPoll.Stop();if($script:specJob){Remove-Job -Job $script:specJob -Force -ErrorAction SilentlyContinue};$homeClockTimer.Stop();try{$script:cpuCounter.Dispose();$script:memCounter.Dispose();foreach($gc in $script:gpuCounters){$gc.Dispose()}}catch{};$form.Close()})
 ApplyTheme
+
+# Thin theme-aware scrollbar overlay for long WinForms pages. The underlying
+# AutoScroll model is retained for wheel/keyboard navigation; native bars are hidden.
+$script:TayScrollers=New-Object System.Collections.ArrayList
+function UpdateTayScrollbar($entry) {
+ try{
+  $target=$entry.Target;$track=$entry.Track;$thumb=$entry.Thumb
+  if($target.IsDisposed -or -not $target.IsHandleCreated){return}
+  $client=[math]::Max(1,$target.ClientSize.Height)
+  $content=[math]::Max([int]$target.AutoScrollMinSize.Height,[int]$target.DisplayRectangle.Height)
+  $maximum=[math]::Max(0,$content-$client)
+  if($maximum -lt 8){$track.Visible=$false;return}
+  $track.Visible=$true
+  $track.Height=[math]::Max(36,$client-12)
+  $track.Location=[Drawing.Point]::new(($target.ClientSize.Width-12),([math]::Max(0,-$target.AutoScrollPosition.Y)+6))
+  $size=[math]::Max(25,[int]($track.Height*$client/[math]::Max($content,1)))
+  $thumb.Height=[math]::Min($track.Height,$size)
+  if(-not $entry.Dragging){
+   $offset=[math]::Max(0,-$target.AutoScrollPosition.Y)
+   $travel=[math]::Max(0,$track.Height-$thumb.Height)
+   $thumb.Top=if($maximum -gt 0){[int]($offset*$travel/$maximum)}else{0}
+  }
+  $accent=[Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName])
+  $thumb.BackColor=$accent
+  [void][TayWindowNative]::ShowScrollBar($target.Handle,3,$false)
+  $track.BringToFront()
+ }catch{}
+}
+function AddTayScrollbar($target){
+ if(-not $target -or -not $target.AutoScroll){return}
+ $track=New-Object Windows.Forms.Panel;$track.Size=[Drawing.Size]::new(7,80)
+ $track.BackColor=[Drawing.Color]::FromArgb(46,43,67);$track.Tag='TaySlimScrollTrack'
+ $thumb=New-Object Windows.Forms.Panel;$thumb.Size=[Drawing.Size]::new(7,28)
+ $thumb.BackColor=[Drawing.Color]::FromArgb(144,95,255);$thumb.Cursor=[Windows.Forms.Cursors]::Hand
+ $track.Controls.Add($thumb);$target.Controls.Add($track);$track.BringToFront()
+ $entry=[pscustomobject]@{Target=$target;Track=$track;Thumb=$thumb;Dragging=$false;GrabY=0}
+ [void]$script:TayScrollers.Add($entry)
+ $thumb.Add_MouseDown({param($sender,$e)
+  if($e.Button -eq [Windows.Forms.MouseButtons]::Left){$entry=$sender.Tag;$entry.Dragging=$true;$entry.GrabY=$e.Y}
+ })
+ $thumb.Tag=$entry
+ $thumb.Add_MouseUp({param($sender,$e);$sender.Tag.Dragging=$false})
+ $thumb.Add_MouseMove({param($sender,$e)
+  $entry=$sender.Tag;if(-not $entry.Dragging){return}
+  $target=$entry.Target;$track=$entry.Track
+  $content=[math]::Max([int]$target.AutoScrollMinSize.Height,[int]$target.DisplayRectangle.Height)
+  $max=[math]::Max(0,$content-$target.ClientSize.Height)
+  $travel=[math]::Max(1,$track.Height-$entry.Thumb.Height)
+  $pos=[math]::Max(0,[math]::Min($travel,$entry.Thumb.Top+$e.Y-$entry.GrabY))
+  $target.AutoScrollPosition=[Drawing.Point]::new(0,[int]($pos*$max/$travel))
+  UpdateTayScrollbar $entry
+ })
+ $track.Add_MouseDown({param($sender,$e)
+  if($e.Button -ne [Windows.Forms.MouseButtons]::Left){return}
+  $entry=$sender.Tag;$target=$entry.Target
+  $content=[math]::Max([int]$target.AutoScrollMinSize.Height,[int]$target.DisplayRectangle.Height)
+  $max=[math]::Max(0,$content-$target.ClientSize.Height)
+  $travel=[math]::Max(1,$sender.Height-$entry.Thumb.Height)
+  $target.AutoScrollPosition=[Drawing.Point]::new(0,[int]([math]::Max(0,[math]::Min(1,($e.Y-$entry.Thumb.Height/2)/$travel))*$max))
+  UpdateTayScrollbar $entry
+ })
+ $track.Tag=$entry
+ $target.Add_Scroll({param($sender,$e);foreach($entry in @($script:TayScrollers)){if($entry.Target -eq $sender){UpdateTayScrollbar $entry}}})
+ $target.Add_SizeChanged({param($sender,$e);foreach($entry in @($script:TayScrollers)){if($entry.Target -eq $sender){UpdateTayScrollbar $entry}}})
+ UpdateTayScrollbar $entry
+}
+foreach($scrollPage in @($nav,$tweakPanel)+@($tabs.TabPages | Where-Object {$_.AutoScroll})){AddTayScrollbar $scrollPage}
+$slimScrollTimer=New-Object Windows.Forms.Timer
+$slimScrollTimer.Interval=350
+$slimScrollTimer.Add_Tick({foreach($entry in @($script:TayScrollers)){UpdateTayScrollbar $entry}})
+$slimScrollTimer.Start()
+
+$resizeGrip.BringToFront()
 Log "Tay-Tweaks launched."
 [void]$form.ShowDialog()
