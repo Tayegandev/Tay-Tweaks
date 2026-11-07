@@ -454,26 +454,85 @@ $usageTab.Add_Enter({UpdateUsageSpecs;UpdateUsage;$usageTimer.Start()})
 $usageTab.Add_Leave({$usageTimer.Stop()})
 
 # User settings and color themes
-$script:SettingsFile=Join-Path $env:APPDATA 'TayTweaks\settings.json';$script:ThemeName='Tay Orange'
-$script:Themes=@{'Tay Orange'='#FF7900';'Crimson Red'='#F04452';'Royal Purple'='#A66BFF';'Neon Green'='#48D978';'Ocean Blue'='#4B9FFF';'Midnight'='#9299AA';'Light'='#F28724';'Pure White'='#4B85E8'}
+$script:SettingsFile=Join-Path $env:APPDATA 'TayTweaks\settings.json';$script:ThemeName='Royal Purple'
+$script:Themes=@{'Tay Orange'='#FF7900';'Crimson Red'='#F04452';'Royal Purple'='#A66BFF';'Neon Green'='#48D978';'Ocean Blue'='#4B9FFF';'Midnight'='#9299AA';'Light'='#F28724';'Pure White'='#4B85E8';'Aurora Teal'='#37D7C5';'Electric Blue'='#448BFF'}
 try{if(Test-Path $script:SettingsFile){$saved=Get-Content $script:SettingsFile -Raw|ConvertFrom-Json;if($script:Themes.ContainsKey([string]$saved.theme)){$script:ThemeName=[string]$saved.theme}}}catch{Log "Theme settings load: $($_.Exception.Message)"}
 function SaveTheme {try{New-Item -ItemType Directory -Force -Path (Split-Path $script:SettingsFile)|Out-Null;@{theme=$script:ThemeName}|ConvertTo-Json|Set-Content -LiteralPath $script:SettingsFile -Encoding UTF8}catch{Log "Save theme: $($_.Exception.Message)"}}
-function ApplyTheme {
- $accent=[System.Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName]);$light=$script:ThemeName -in @('Light','Pure White');$base=if($light){[System.Drawing.Color]::FromArgb(245,246,249)}else{[System.Drawing.Color]::FromArgb(12,10,12)};$fg=if($light){[System.Drawing.Color]::FromArgb(28,30,35)}else{[System.Drawing.Color]::FromArgb(238,239,243)}
- $form.BackColor=$base;$form.ForeColor=$fg;$head.BackColor=if($light){[System.Drawing.Color]::White}else{[System.Drawing.Color]::FromArgb(18,10,12)};$nav.BackColor=if($light){[System.Drawing.Color]::FromArgb(230,233,239)}else{[System.Drawing.Color]::FromArgb(21,17,20)};$ttl.ForeColor=$accent
- foreach($page in @($tabs.TabPages)){$page.BackColor=$base;$page.ForeColor=$fg}
- function ColorChildren($parent){foreach($c in $parent.Controls){if($c -is [System.Windows.Forms.Button]){$c.BackColor=$accent;$c.ForeColor=[System.Drawing.Color]::Black}elseif($c -is [System.Windows.Forms.Label]){if($c -ne $ttl -and $c -ne $sub -and $c -ne $usageInfo){$c.ForeColor=$fg}};if($c.HasChildren){ColorChildren $c}}}
- foreach($page in @($tabs.TabPages)){ColorChildren $page}
- foreach($b in $nav.Controls){if($b -is [System.Windows.Forms.Button]){$b.ForeColor=$fg;$b.BackColor=if($light){[System.Drawing.Color]::White}else{[System.Drawing.Color]::FromArgb(32,25,28)}}}
- foreach($b in @($apply,$restore,$undo,$logs,$exit)){$b.BackColor=$accent}
- $usageIntro.ForeColor=$accent
- $surface=if($light){[System.Drawing.Color]::White}else{[System.Drawing.Color]::FromArgb(23,20,25)}
- $usageChart.BackColor=$surface;$usageInfo.BackColor=$surface;$usageInfo.ForeColor=$fg
- foreach($meter in $usageGaugePanels.Values){$meter.BackColor=$surface;$meter.Invalidate()}
- foreach($label in $usageLabels.Values){$label.ForeColor=$fg}
- $usageFoot.ForeColor=$fg
- $usageTab.Invalidate();$usageChart.Invalidate()
+
+# Smooth, consistent theme application across pages, cards, controls and navigation.
+function SetTayRounded($control,[int]$radius=12) {
+ try{
+  $w=$control.Width;$h=$control.Height;if($w -lt 8 -or $h -lt 8){return}
+  $r=[math]::Min($radius,[int]([math]::Min($w,$h)/2));$d=$r*2
+  $p=New-Object Drawing.Drawing2D.GraphicsPath
+  $p.AddArc(0,0,$d,$d,180,90);$p.AddArc(($w-$d),0,$d,$d,270,90)
+  $p.AddArc(($w-$d),($h-$d),$d,$d,0,90);$p.AddArc(0,($h-$d),$d,$d,90,90)
+  $p.CloseFigure();$control.Region=New-Object Drawing.Region($p);$p.Dispose()
+ }catch{}
 }
+function HighlightTayNav {
+ if(-not $script:Themes){return}
+ $accent=[Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName])
+ $light=$script:ThemeName -in @('Light','Pure White')
+ foreach($btn in @($nav.Controls)){
+  if($btn -isnot [Windows.Forms.Button]){continue}
+  $active=($btn.Tag -eq $tabs.SelectedTab)
+  $btn.BackColor=if($active){$accent}elseif($light){[Drawing.Color]::White}else{[Drawing.Color]::FromArgb(26,26,42)}
+  $btn.ForeColor=if($active){[Drawing.Color]::FromArgb(17,17,25)}elseif($light){[Drawing.Color]::FromArgb(38,42,55)}else{[Drawing.Color]::FromArgb(196,199,218)}
+  $btn.FlatAppearance.BorderSize=0
+  SetTayRounded $btn 10
+ }
+}
+function ApplyTheme {
+ $accent=[Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName])
+ $light=$script:ThemeName -in @('Light','Pure White')
+ $base=if($light){[Drawing.Color]::FromArgb(244,246,252)}else{[Drawing.Color]::FromArgb(12,11,21)}
+ $surface=if($light){[Drawing.Color]::White}else{[Drawing.Color]::FromArgb(21,21,35)}
+ $fg=if($light){[Drawing.Color]::FromArgb(29,35,50)}else{[Drawing.Color]::FromArgb(240,241,250)}
+ $muted=if($light){[Drawing.Color]::FromArgb(90,99,120)}else{[Drawing.Color]::FromArgb(159,165,189)}
+ $form.BackColor=$base;$form.ForeColor=$fg
+ $head.BackColor=$base;$nav.BackColor=$base;$ttl.ForeColor=$accent;$sub.ForeColor=$muted
+ foreach($page in @($tabs.TabPages)){$page.BackColor=$base;$page.ForeColor=$fg}
+ function StyleTayControls($parent){
+  foreach($control in @($parent.Controls)){
+   if($control -is [Windows.Forms.Button]){
+    $control.FlatStyle='Flat';$control.FlatAppearance.BorderSize=0
+    $secondary=($control.Text -match '(Restore|Undo|Exit|Cancel|Logs|Normal|Back|Reset)')
+    $control.BackColor=if($secondary){$surface}else{$accent}
+    $control.ForeColor=if($secondary){$fg}else{[Drawing.Color]::FromArgb(18,18,28)}
+    if($control.Height -ge 25){SetTayRounded $control 9}
+   }elseif($control -is [Windows.Forms.Label]){
+    if($control -ne $ttl -and $control -ne $sub){$control.ForeColor=$fg}
+   }elseif($control -is [Windows.Forms.Panel] -and $control.Tag -eq 'TayCard'){
+    $control.BackColor=$surface;SetTayRounded $control 17
+   }elseif($control -is [Windows.Forms.ComboBox]){
+    $control.BackColor=$surface;$control.ForeColor=$fg;$control.FlatStyle='Flat'
+   }elseif($control -is [Windows.Forms.CheckBox]){
+    $control.ForeColor=$fg
+   }
+   if($control.HasChildren){StyleTayControls $control}
+  }
+ }
+ foreach($page in @($tabs.TabPages)){StyleTayControls $page}
+ $usageIntro.ForeColor=$fg;$usageSubtitle.ForeColor=$muted
+ foreach($key in @('cpu','gpu','ram')){
+  $usageGaugePanels[$key].BackColor=$surface
+  $usageBars[$key].BackColor=$accent
+  $usageValues[$key].ForeColor=$fg
+  $usageLabels[$key].ForeColor=$muted
+ }
+ $usageInfo.BackColor=$surface;$usageChart.BackColor=$surface
+ $sysTitle.ForeColor=$fg;$usageGraphTitle.ForeColor=$fg
+ foreach($entry in @($usageInfo.Controls)){if($entry -is [Windows.Forms.Label]){$entry.ForeColor=if($entry -eq $sysTitle){$fg}elseif($entry.Font.Bold){$muted}else{$fg}}}
+ $usageFoot.ForeColor=$muted
+ foreach($btn in @($apply,$restore,$undo,$logs,$exit)){
+  if($btn){$btn.BackColor=if($btn -eq $apply){$accent}else{$surface};$btn.ForeColor=if($btn -eq $apply){[Drawing.Color]::FromArgb(18,18,28)}else{$fg};SetTayRounded $btn 11}
+ }
+ HighlightTayNav
+ $usageChart.Invalidate()
+}
+$tabs.Add_SelectedIndexChanged({HighlightTayNav})
+
 function PageLabel($page,[string]$text,[int]$x,[int]$y,[int]$w=770){$l=New-Object System.Windows.Forms.Label;$l.Text=$text;$l.Location=[System.Drawing.Point]::new($x,$y);$l.Size=[System.Drawing.Size]::new($w,32);$l.ForeColor=[System.Drawing.Color]::Gainsboro;$page.Controls.Add($l);return $l}
 function PageButton($page,[string]$text,[int]$x,[int]$y,[scriptblock]$action){$b=New-Object System.Windows.Forms.Button;$b.Text=$text;$b.Location=[System.Drawing.Point]::new($x,$y);$b.Size=[System.Drawing.Size]::new(340,37);$b.FlatStyle='Flat';$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(255,112,0);$b.ForeColor=[System.Drawing.Color]::Black;$b.Add_Click($action);$page.Controls.Add($b);return $b}
 $inputTab.AutoScroll=$true
@@ -602,7 +661,7 @@ PageButton $tcpTab 'Open network troubleshooting' 24 206 {Start-Process 'ms-sett
 PageLabel $tcpTab 'Avoid arbitrary MTU, TCP ACK, congestion-control or Nagle edits without testing: they can worsen connection quality.' 24 266 | Out-Null
 PageLabel $settingsTab 'SETTINGS / APPEARANCE' 24 18 | Out-Null
 PageLabel $settingsTab 'Choose a theme (saved automatically):' 24 64 | Out-Null
-$themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle='DropDownList';$themePicker.Location=[System.Drawing.Point]::new(24,100);$themePicker.Size=[System.Drawing.Size]::new(280,30);$themePicker.Items.AddRange(@('Tay Orange','Crimson Red','Royal Purple','Neon Green','Ocean Blue','Midnight','Light','Pure White'));$themePicker.SelectedItem=$script:ThemeName;$settingsTab.Controls.Add($themePicker)
+$themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle='DropDownList';$themePicker.Location=[System.Drawing.Point]::new(24,100);$themePicker.Size=[System.Drawing.Size]::new(280,30);$themePicker.Items.AddRange(@('Tay Orange','Crimson Red','Royal Purple','Neon Green','Ocean Blue','Midnight','Light','Pure White','Aurora Teal','Electric Blue'));$themePicker.SelectedItem=$script:ThemeName;$settingsTab.Controls.Add($themePicker)
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
@@ -699,7 +758,7 @@ $undo.Add_Click({
  try{$s=Get-Content $BackupFile -Raw|ConvertFrom-Json;UndoSnapshot @($s.Snapshot);Log "Last session undone.";Remove-Item $AppliedFile -Force -ErrorAction SilentlyContinue;$homePrevious.Text="PREVIOUSLY APPLIED / SELECTED`r`nLast session was undone."; $status.Text="Previous registry values restored.";[System.Windows.Forms.MessageBox]::Show("Previous registry values restored. Restart if needed.","Tay Tweaks")|Out-Null}catch{[System.Windows.Forms.MessageBox]::Show("Undo failed: $($_.Exception.Message)","Tay Tweaks")|Out-Null}
 })
 $logs.Add_Click({New-Item -ItemType Directory -Path $DataDir -Force|Out-Null;Start-Process explorer.exe $DataDir})
-$exit.Add_Click({$usageTimer.Stop();$homeClockTimer.Stop();try{$script:cpuCounter.Dispose();$script:memCounter.Dispose();foreach($gc in $script:gpuCounters){$gc.Dispose()}}catch{};$form.Close()})
+$exit.Add_Click({$usageTimer.Stop();$specPoll.Stop();if($script:specJob){Remove-Job -Job $script:specJob -Force -ErrorAction SilentlyContinue};$homeClockTimer.Stop();try{$script:cpuCounter.Dispose();$script:memCounter.Dispose();foreach($gc in $script:gpuCounters){$gc.Dispose()}}catch{};$form.Close()})
 ApplyTheme
 Log "Tay-Tweaks launched."
 [void]$form.ShowDialog()
