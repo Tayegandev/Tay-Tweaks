@@ -240,13 +240,13 @@ $script:TayDragWindow={
 }
 function AddTayWindowDot([string]$action,[Drawing.Color]$color,[int]$x,[string]$symbol) {
  $btn=New-Object Windows.Forms.Button
- $btn.Name='TayFrame'+$action;$btn.Text='';$btn.Tag='TayFrame'
+ $btn.Name='TayFrame'+$action;$btn.Text='';$btn.Tag=$color
  $btn.Location=[Drawing.Point]::new($x,28);$btn.Size=[Drawing.Size]::new(16,16)
  $btn.FlatStyle='Flat';$btn.FlatAppearance.BorderSize=0;$btn.BackColor=$color
  $btn.ForeColor=[Drawing.Color]::FromArgb(35,35,45);$btn.Font=New-Object Drawing.Font('Segoe UI',8,[Drawing.FontStyle]::Bold)
- $btn.Add_MouseEnter({$this.BackColor=[Drawing.Color]::FromArgb([int]($this.BackColor.R*0.82),[int]($this.BackColor.G*0.82),[int]($this.BackColor.B*0.82));$this.Text=[string]$this.AccessibleDescription})
- $btn.Add_MouseLeave({$this.BackColor=[Drawing.Color]::FromArgb([int]$this.AccessibleDefaultAction.Split(',')[0],[int]$this.AccessibleDefaultAction.Split(',')[1],[int]$this.AccessibleDefaultAction.Split(',')[2]);$this.Text=''})
- $btn.AccessibleDescription=$symbol;$btn.AccessibleDefaultAction="$($color.R),$($color.G),$($color.B)"
+ $btn.Add_MouseEnter({$original=[Drawing.Color]$this.Tag;$this.BackColor=[Drawing.Color]::FromArgb([int]($original.R*0.82),[int]($original.G*0.82),[int]($original.B*0.82));$this.Text=[string]$this.AccessibleDescription})
+ $btn.Add_MouseLeave({$this.BackColor=[Drawing.Color]$this.Tag;$this.Text=''})
+ $btn.AccessibleDescription=$symbol
  $btn.Add_Click({
   switch($this.Name){
    'TayFrameClose' {$form.Close()}
