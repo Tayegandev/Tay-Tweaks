@@ -867,11 +867,9 @@ $script:TayCardBorder={
 }
 foreach($panel in @($usageInfo,$usageChart)+@($usageGaugePanels.Values)){$panel.Add_Paint($script:TayCardBorder)}
 $form.Add_Shown({
- $form.MaximizedBounds=[Windows.Forms.Screen]::FromControl($form).WorkingArea
  SetTayDashboardLayout
  $resizeGrip.BringToFront()
 })
-$frameMax.Add_Click({$form.MaximizedBounds=[Windows.Forms.Screen]::FromControl($form).WorkingArea})
 
 # Thin theme-aware scrollbar overlay for long WinForms pages. The underlying
 # AutoScroll model is retained for wheel/keyboard navigation; native bars are hidden.
