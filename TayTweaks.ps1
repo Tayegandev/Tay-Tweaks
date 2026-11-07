@@ -358,74 +358,100 @@ PresetButton "LIGHT" 18 { foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -
 PresetButton "MEDIUM" 198 { foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored'))} }
 PresetButton "PRO PERFORMANCE" 378 { foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored','menuanimation','menushowdelay','taskview','searchbutton','disabletaskbarbadges','disablewindowshakes','disableappbackground','disableactivityhistory','disableactivityupload','disablecloudclipboard','disableclipboardsync','disabletaskbarflashing'))} }
 
-# Live usage: use PerformanceCounter sampling rather than synchronous WMI queries every tick.
-# WMI on the UI thread caused hangs/non-responsive clicks on some systems.
+
+# v7 Performance dashboard - use lightweight counters; enumerate hardware in a background job.
 $usageTab.AutoScroll=$true
-$usageIntro=New-Object System.Windows.Forms.Label;$usageIntro.Text='SYSTEM USAGE   /   LIVE MONITORING';$usageIntro.Location=[System.Drawing.Point]::new(20,12);$usageIntro.Size=[System.Drawing.Size]::new(820,36);$usageIntro.Font=New-Object System.Drawing.Font('Segoe UI',18,[System.Drawing.FontStyle]::Bold);$usageIntro.ForeColor=[System.Drawing.Color]::FromArgb(255,112,0);$usageTab.Controls.Add($usageIntro)
-$usageLabels=@{};$usageBars=@{};$usageGaugePanels=@{};$script:usageGaugeValues=@{cpu=0;ram=0;gpu=0;cputemp=0};$script:usageAvailable=@{cpu=$false;ram=$false;gpu=$false;cputemp=$false}
-function AddUsageMeter([string]$key,[string]$title,[int]$x,[int]$y){
- $panel=New-Object System.Windows.Forms.Panel;$panel.Location=[System.Drawing.Point]::new($x,$y);$panel.Size=[System.Drawing.Size]::new(194,211);$panel.BackColor=[System.Drawing.Color]::FromArgb(22,17,17);$panel.Tag=$key
- $panel.Add_Paint({param($sender,$e)
-  $g=$e.Graphics;$g.SmoothingMode=[System.Drawing.Drawing2D.SmoothingMode]::AntiAlias;$key=[string]$sender.Tag;$value=[int]$script:usageGaugeValues[$key]
-  $track=New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(60,58,58),12);$track.StartCap='Round';$track.EndCap='Round'
-  $ringColor=[System.Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName]);$accent=New-Object System.Drawing.Pen($ringColor,12);$accent.StartCap='Round';$accent.EndCap='Round'
-  $rect=[System.Drawing.Rectangle]::new(24,15,146,146);$g.DrawArc($track,$rect,-90,359)
-  if($script:usageAvailable[$key] -and $value -gt 0){$g.DrawArc($accent,$rect,-90,[single](359*$value/100))}
-  $font=New-Object System.Drawing.Font('Segoe UI',20,[System.Drawing.FontStyle]::Bold);$small=New-Object System.Drawing.Font('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
-  $gaugeText=if($script:ThemeName -in @('Light','Pure White')){[System.Drawing.Color]::Black}else{[System.Drawing.Color]::White};$white=New-Object System.Drawing.SolidBrush($gaugeText);$orange=New-Object System.Drawing.SolidBrush($ringColor)
-  $format=New-Object System.Drawing.StringFormat;$format.Alignment='Center'
-  $caption= switch($key){'cpu'{'CPU'}'gpu'{'GPU'}'ram'{'RAM'}'cputemp'{'TEMP'}}
-  $display='N/A';if($script:usageAvailable[$key]){if($key -eq 'cputemp'){$display="$value$([char]176)C"}else{$display="$value%"}}
-  $g.DrawString($caption,$small,$orange,[System.Drawing.RectangleF]::new(20,65,154,25),$format)
-  $g.DrawString($display,$font,$white,[System.Drawing.RectangleF]::new(15,91,164,46),$format)
-  foreach($o in @($track,$accent,$font,$small,$white,$orange,$format)){$o.Dispose()}
- });$usageTab.Controls.Add($panel);$usageGaugePanels[$key]=$panel
- $detail=New-Object System.Windows.Forms.Label;$detail.Text='Waiting for data...';$detail.Location=[System.Drawing.Point]::new(7,174);$detail.Size=[System.Drawing.Size]::new(180,30);$detail.TextAlign='MiddleCenter';$detail.ForeColor=[System.Drawing.Color]::Gainsboro;$panel.Controls.Add($detail);$usageLabels[$key]=$detail
-}
-AddUsageMeter 'cpu' 'CPU' 15 55
-AddUsageMeter 'gpu' 'GPU' 224 55
-AddUsageMeter 'ram' 'RAM' 433 55
-AddUsageMeter 'cputemp' 'TEMP' 642 55
-$usageChart=New-Object System.Windows.Forms.Panel;$usageChart.Location=[System.Drawing.Point]::new(15,278);$usageChart.Size=[System.Drawing.Size]::new(535,228);$usageChart.BackColor=[System.Drawing.Color]::FromArgb(20,15,16);$usageTab.Controls.Add($usageChart)
+$usageIntro=New-Object Windows.Forms.Label;$usageIntro.Text='Performance';$usageIntro.Location=[Drawing.Point]::new(14,10);$usageIntro.Size=[Drawing.Size]::new(570,38);$usageIntro.Font=New-Object Drawing.Font('Segoe UI',19,[Drawing.FontStyle]::Bold);$usageTab.Controls.Add($usageIntro)
+$usageSubtitle=New-Object Windows.Forms.Label;$usageSubtitle.Text='Live system readings and detected PC components';$usageSubtitle.Location=[Drawing.Point]::new(16,47);$usageSubtitle.Size=[Drawing.Size]::new(700,25);$usageSubtitle.ForeColor=[Drawing.Color]::Silver;$usageTab.Controls.Add($usageSubtitle)
+$usageLabels=@{};$usageBars=@{};$usageGaugePanels=@{};$usageValues=@{};$script:usageGaugeValues=@{cpu=0;ram=0;gpu=0;cputemp=0};$script:usageAvailable=@{cpu=$false;ram=$false;gpu=$false;cputemp=$false}
 $script:usageHistory=@{CPU=(New-Object System.Collections.ArrayList);GPU=(New-Object System.Collections.ArrayList);RAM=(New-Object System.Collections.ArrayList)}
-$usageChartChoice=New-Object System.Windows.Forms.ComboBox;$usageChartChoice.DropDownStyle='DropDownList';$usageChartChoice.Items.AddRange(@('CPU','GPU','RAM'));$usageChartChoice.SelectedIndex=0;$usageChartChoice.Location=[System.Drawing.Point]::new(424,10);$usageChartChoice.Size=[System.Drawing.Size]::new(100,25);$usageChart.Controls.Add($usageChartChoice)
+function NewUsageCard([string]$key,[string]$caption,[int]$x,[int]$y) {
+ $p=New-Object Windows.Forms.Panel;$p.Location=[Drawing.Point]::new($x,$y);$p.Size=[Drawing.Size]::new(264,168);$p.BackColor=[Drawing.Color]::FromArgb(20,21,34);$p.Tag='TayCard';$usageTab.Controls.Add($p);$usageGaugePanels[$key]=$p
+ $heading=New-Object Windows.Forms.Label;$heading.Text=$caption;$heading.Location=[Drawing.Point]::new(18,13);$heading.Size=[Drawing.Size]::new(226,22);$heading.ForeColor=[Drawing.Color]::FromArgb(170,174,194);$heading.Font=New-Object Drawing.Font('Segoe UI',9,[Drawing.FontStyle]::Bold);$p.Controls.Add($heading)
+ $big=New-Object Windows.Forms.Label;$big.Text='--%';$big.Location=[Drawing.Point]::new(18,43);$big.Size=[Drawing.Size]::new(225,58);$big.Font=New-Object Drawing.Font('Segoe UI',29,[Drawing.FontStyle]::Bold);$big.ForeColor=[Drawing.Color]::White;$p.Controls.Add($big);$usageValues[$key]=$big
+ $detail=New-Object Windows.Forms.Label;$detail.Text='Waiting for sensor...';$detail.Location=[Drawing.Point]::new(18,104);$detail.Size=[Drawing.Size]::new(225,23);$detail.ForeColor=[Drawing.Color]::Silver;$p.Controls.Add($detail);$usageLabels[$key]=$detail
+ $track=New-Object Windows.Forms.Panel;$track.Location=[Drawing.Point]::new(18,140);$track.Size=[Drawing.Size]::new(227,7);$track.BackColor=[Drawing.Color]::FromArgb(53,56,76);$p.Controls.Add($track)
+ $fill=New-Object Windows.Forms.Panel;$fill.Location=[Drawing.Point]::new(0,0);$fill.Size=[Drawing.Size]::new(0,7);$fill.BackColor=[Drawing.Color]::FromArgb(138,95,255);$track.Controls.Add($fill);$usageBars[$key]=$fill
+}
+NewUsageCard 'cpu' 'CPU' 14 82
+NewUsageCard 'gpu' 'GPU' 291 82
+NewUsageCard 'ram' 'MEMORY' 568 82
+$usageInfo=New-Object Windows.Forms.Panel;$usageInfo.Location=[Drawing.Point]::new(14,263);$usageInfo.Size=[Drawing.Size]::new(322,281);$usageInfo.BackColor=[Drawing.Color]::FromArgb(20,21,34);$usageInfo.Tag='TayCard';$usageTab.Controls.Add($usageInfo)
+$sysTitle=New-Object Windows.Forms.Label;$sysTitle.Text='System';$sysTitle.Location=[Drawing.Point]::new(18,13);$sysTitle.Size=[Drawing.Size]::new(270,30);$sysTitle.Font=New-Object Drawing.Font('Segoe UI',13,[Drawing.FontStyle]::Bold);$usageInfo.Controls.Add($sysTitle)
+$script:specLabels=@{}
+$specRows=@(@('CPU',49),@('GPU',105),@('MEMORY',161),@('OS',217))
+foreach($item in $specRows){
+ $k=[string]$item[0];$y=[int]$item[1]
+ $h=New-Object Windows.Forms.Label;$h.Text=$k;$h.Location=[Drawing.Point]::new(19,$y);$h.Size=[Drawing.Size]::new(284,19);$h.Font=New-Object Drawing.Font('Segoe UI',8,[Drawing.FontStyle]::Bold);$h.ForeColor=[Drawing.Color]::FromArgb(141,146,170);$usageInfo.Controls.Add($h)
+ $v=New-Object Windows.Forms.Label;$v.Text='Detecting...';$v.Location=[Drawing.Point]::new(19,($y+19));$v.Size=[Drawing.Size]::new(284,36);$v.Font=New-Object Drawing.Font('Segoe UI',9);$v.ForeColor=[Drawing.Color]::White;$usageInfo.Controls.Add($v);$script:specLabels[$k]=$v
+}
+$usageChart=New-Object Windows.Forms.Panel;$usageChart.Location=[Drawing.Point]::new(349,263);$usageChart.Size=[Drawing.Size]::new(483,281);$usageChart.BackColor=[Drawing.Color]::FromArgb(20,21,34);$usageChart.Tag='TayCard';$usageTab.Controls.Add($usageChart)
+$usageGraphTitle=New-Object Windows.Forms.Label;$usageGraphTitle.Text='Activity history';$usageGraphTitle.Location=[Drawing.Point]::new(19,13);$usageGraphTitle.Size=[Drawing.Size]::new(220,29);$usageGraphTitle.Font=New-Object Drawing.Font('Segoe UI',13,[Drawing.FontStyle]::Bold);$usageChart.Controls.Add($usageGraphTitle)
+$usageChartChoice=New-Object Windows.Forms.ComboBox;$usageChartChoice.DropDownStyle='DropDownList';$usageChartChoice.Items.AddRange([object[]]@('CPU','GPU','RAM'));$usageChartChoice.SelectedIndex=0;$usageChartChoice.Location=[Drawing.Point]::new(353,14);$usageChartChoice.Size=[Drawing.Size]::new(110,28);$usageChart.Controls.Add($usageChartChoice)
 $usageChart.Add_Paint({param($sender,$e)
- $g=$e.Graphics;$g.SmoothingMode='AntiAlias';$pen=New-Object System.Drawing.Pen([System.Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName]),2);$gridPen=New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(48,48,48),1)
- for($i=0;$i -le 4;$i++){$y=50+$i*39;$g.DrawLine($gridPen,15,$y,520,$y)}
- $samples=@($script:usageHistory[[string]$usageChartChoice.SelectedItem]);if($samples.Count -gt 1){$pts=New-Object 'System.Collections.Generic.List[System.Drawing.PointF]';for($i=0;$i -lt $samples.Count;$i++){$xx=15+($i*505.0/79);$yy=206-([double]$samples[$i]*1.56);$pts.Add([System.Drawing.PointF]::new([single]$xx,[single]$yy))};if($pts.Count -gt 1){$g.DrawLines($pen,$pts.ToArray())}}
- $pen.Dispose();$gridPen.Dispose()
+ $g=$e.Graphics;$g.SmoothingMode='AntiAlias'
+ $gridPen=New-Object Drawing.Pen([Drawing.Color]::FromArgb(47,50,69),1)
+ for($i=0;$i -lt 5;$i++){$y=70+$i*46;$g.DrawLine($gridPen,17,$y,464,$y)}
+ $samples=@($script:usageHistory[[string]$usageChartChoice.SelectedItem])
+ if($samples.Count -gt 1){
+  $accent=[Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName]);$pen=New-Object Drawing.Pen($accent,2)
+  $pts=New-Object 'System.Collections.Generic.List[System.Drawing.PointF]'
+  for($i=0;$i -lt $samples.Count;$i++){$xx=18+($i*446.0/79);$yy=254-([double]$samples[$i]*1.84);$pts.Add([Drawing.PointF]::new([single]$xx,[single]$yy))}
+  if($pts.Count -gt 1){$g.DrawLines($pen,$pts.ToArray())}
+  $pen.Dispose()
+ }
+ $gridPen.Dispose()
 })
 $usageChartChoice.Add_SelectedIndexChanged({$usageChart.Invalidate()})
-$usageInfo=New-Object System.Windows.Forms.Label;$usageInfo.Location=[System.Drawing.Point]::new(565,278);$usageInfo.Size=[System.Drawing.Size]::new(270,228);$usageInfo.BackColor=[System.Drawing.Color]::FromArgb(23,18,18);$usageInfo.ForeColor=[System.Drawing.Color]::Gainsboro;$usageInfo.Font=New-Object System.Drawing.Font('Segoe UI',10);$usageInfo.Padding=New-Object System.Windows.Forms.Padding(12);$usageInfo.Text='SYSTEM INFO';$usageTab.Controls.Add($usageInfo)
-$usageInfo.Font=New-Object System.Drawing.Font('Segoe UI',8.5)
-$usageInfo.Text='SYSTEM INFO - Open Usage to detect hardware'
-$script:usageSpecsLoaded=$false
-function UpdateUsageSpecs {
- if($script:usageSpecsLoaded){return}
- $script:usageSpecsLoaded=$true
- $cpuName='Unavailable';$gpuName='Unavailable';$ramName='Unavailable';$osName='Unavailable'
- try{$cpu=Get-CimInstance Win32_Processor -ErrorAction Stop|Select-Object -First 1;if($cpu -and $cpu.Name){$cpuName=([string]$cpu.Name).Trim()}}catch{}
- try{$gpu=Get-CimInstance Win32_VideoController -ErrorAction Stop|Where-Object {$_.Name}|Select-Object -First 1;if($gpu){$gpuName=([string]$gpu.Name).Trim()}}catch{}
- try{$os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop;if($os){$osName=([string]$os.Caption).Trim();if($os.TotalVisibleMemorySize){$ramName=('{0:N1} GB' -f ([double]$os.TotalVisibleMemorySize/1MB))}}}catch{}
- $usageInfo.Text="SYSTEM INFO`r`n`r`nCPU: $cpuName`r`n`r`nGPU: $gpuName`r`n`r`nRAM: $ramName`r`n`r`nOS: $osName"
+$usageFoot=New-Object Windows.Forms.Label;$usageFoot.Text='GPU and temperature readings depend on Windows driver support. Hardware details are read separately.';$usageFoot.Location=[Drawing.Point]::new(18,552);$usageFoot.Size=[Drawing.Size]::new(800,30);$usageFoot.ForeColor=[Drawing.Color]::Silver;$usageTab.Controls.Add($usageFoot)
+$usageTab.AutoScrollMinSize=[Drawing.Size]::new(858,588)
+function SetUsageReading([string]$key,[int]$value,[string]$description){
+ $value=[math]::Max(0,[math]::Min(100,$value));$script:usageGaugeValues[$key]=$value;$script:usageAvailable[$key]=$true
+ $usageLabels[$key].Text=$description;$usageValues[$key].Text="$value%";$usageBars[$key].Width=[int](227*$value/100)
+ $series=switch($key){'cpu'{'CPU'}'gpu'{'GPU'}'ram'{'RAM'}default{''}}
+ if($series){$hist=$script:usageHistory[$series];[void]$hist.Add($value);if($hist.Count -gt 80){$hist.RemoveAt(0)}}
 }
-
-$usageFoot=New-Object System.Windows.Forms.Label;$usageFoot.Text='Live readings depend on Windows drivers. Missing temperature sensors display N/A rather than an estimated value.';$usageFoot.Location=[System.Drawing.Point]::new(18,519);$usageFoot.Size=[System.Drawing.Size]::new(800,42);$usageFoot.ForeColor=[System.Drawing.Color]::Silver;$usageTab.Controls.Add($usageFoot)
-$usageTab.AutoScrollMinSize=[System.Drawing.Size]::new(850,570)
-function SetUsageReading([string]$key,[int]$value,[string]$description){$script:usageGaugeValues[$key]=[math]::Max(0,[math]::Min(100,$value));$script:usageAvailable[$key]=$true;$usageLabels[$key].Text=$description;$usageGaugePanels[$key].Invalidate();$series=switch($key){'cpu'{'CPU'}'gpu'{'GPU'}'ram'{'RAM'}default{''}};if($series){$hist=$script:usageHistory[$series];[void]$hist.Add($value);if($hist.Count -gt 80){$hist.RemoveAt(0)}}}
-$script:cpuCounter=$null;$script:memCounter=$null;$script:gpuCounters=@();$script:totalMemoryGB=0.0;$script:lastTempCheck=[datetime]::MinValue
-try{$script:cpuCounter=[System.Diagnostics.PerformanceCounter]::new("Processor","% Processor Time","_Total");[void]$script:cpuCounter.NextValue()}catch{}
-try{$script:memCounter=[System.Diagnostics.PerformanceCounter]::new("Memory","Available MBytes");[void]$script:memCounter.NextValue()}catch{}
-try{$os0=Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop;$script:totalMemoryGB=[math]::Round(([double]$os0.TotalVisibleMemorySize/1MB),1)}catch{}
-try{$cat=[System.Diagnostics.PerformanceCounterCategory]::new("GPU Engine");$instances=@($cat.GetInstanceNames() | Where-Object {$_ -match "engtype_3D"});foreach($inst in $instances){try{$script:gpuCounters+=[System.Diagnostics.PerformanceCounter]::new("GPU Engine","Utilization Percentage",$inst)}catch{}}}catch{}
+$script:cpuCounter=$null;$script:memCounter=$null;$script:gpuCounters=@();$script:totalMemoryGB=0.0
+try{$script:cpuCounter=[Diagnostics.PerformanceCounter]::new('Processor','% Processor Time','_Total');[void]$script:cpuCounter.NextValue()}catch{}
+try{$script:memCounter=[Diagnostics.PerformanceCounter]::new('Memory','Available MBytes');[void]$script:memCounter.NextValue()}catch{}
+try{$os0=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop;$script:totalMemoryGB=[math]::Round(([double]$os0.TotalVisibleMemorySize/1MB),1)}catch{}
+try{$cat=[Diagnostics.PerformanceCounterCategory]::new('GPU Engine');foreach($inst in @($cat.GetInstanceNames() | Where-Object {$_ -match 'engtype_3D'})){try{$script:gpuCounters+=[Diagnostics.PerformanceCounter]::new('GPU Engine','Utilization Percentage',$inst)}catch{}}}catch{}
 function UpdateUsage {
- try {if($script:cpuCounter){$n=[int][math]::Max(0,[math]::Min(100,$script:cpuCounter.NextValue()));SetUsageReading 'cpu' $n "$n% usage"}else{$usageLabels['cpu'].Text='N/A'}}catch{$usageLabels['cpu'].Text='N/A'}
- try {if($script:memCounter -and $script:totalMemoryGB -gt 0){$freeMB=[double]$script:memCounter.NextValue();$usedGB=[math]::Max(0,$script:totalMemoryGB-($freeMB/1024));$pct=[int][math]::Max(0,[math]::Min(100,(100*$usedGB/$script:totalMemoryGB)));SetUsageReading 'ram' $pct ("{0:N1} / {1:N1} GB" -f $usedGB,$script:totalMemoryGB)}else{$usageLabels['ram'].Text='N/A'}}catch{$usageLabels['ram'].Text='N/A'}
- try {if($script:gpuCounters.Count -gt 0){$sum=0.0;foreach($gc in $script:gpuCounters){try{$sum += [math]::Max(0,$gc.NextValue())}catch{}};$n=[int][math]::Max(0,[math]::Min(100,$sum));SetUsageReading 'gpu' $n "$n% 3D (approx.)"}else{$usageLabels['gpu'].Text='N/A (driver)'}}catch{$usageLabels['gpu'].Text='N/A (driver)'}
- $usageLabels['cputemp'].Text='Sensor unavailable';$script:usageAvailable['cputemp']=$false;if($tabs.SelectedTab -eq $usageTab){$usageChart.Invalidate()}
+ try{if($script:cpuCounter){$n=[int][math]::Max(0,[math]::Min(100,$script:cpuCounter.NextValue()));SetUsageReading 'cpu' $n "$n% processor load"}else{$usageLabels['cpu'].Text='Counter unavailable'}}catch{$usageLabels['cpu'].Text='Counter unavailable'}
+ try{if($script:memCounter -and $script:totalMemoryGB -gt 0){$freeMB=[double]$script:memCounter.NextValue();$usedGB=[math]::Max(0,$script:totalMemoryGB-($freeMB/1024));$pct=[int][math]::Max(0,[math]::Min(100,(100*$usedGB/$script:totalMemoryGB)));SetUsageReading 'ram' $pct ("{0:N1} / {1:N1} GB used" -f $usedGB,$script:totalMemoryGB)}else{$usageLabels['ram'].Text='Counter unavailable'}}catch{$usageLabels['ram'].Text='Counter unavailable'}
+ try{if($script:gpuCounters.Count -gt 0){$sum=0.0;foreach($c in $script:gpuCounters){try{$sum+=[math]::Max(0,$c.NextValue())}catch{}};$n=[int][math]::Max(0,[math]::Min(100,$sum));SetUsageReading 'gpu' $n "$n% 3D engine (approx.)"}else{$usageLabels['gpu'].Text='3D counter unavailable';$usageValues['gpu'].Text='N/A'}}catch{$usageLabels['gpu'].Text='3D counter unavailable';$usageValues['gpu'].Text='N/A'}
+ if($tabs.SelectedTab -eq $usageTab){$usageChart.Invalidate()}
 }
-$usageTimer=New-Object System.Windows.Forms.Timer;$usageTimer.Interval=1200;$usageTimer.Add_Tick({UpdateUsage});$usageTab.Add_Enter({UpdateUsageSpecs;UpdateUsage;$usageTimer.Start()});$usageTab.Add_Leave({$usageTimer.Stop()})
-
+$script:usageSpecsLoaded=$false;$script:specJob=$null
+$specPoll=New-Object Windows.Forms.Timer;$specPoll.Interval=500
+$specPoll.Add_Tick({
+ if(-not $script:specJob){$specPoll.Stop();return}
+ if($script:specJob.State -notin @('Completed','Failed','Stopped')){return}
+ try{
+  $data=Receive-Job -Job $script:specJob -ErrorAction Stop|Select-Object -First 1
+  if($data){
+   $script:specLabels['CPU'].Text=[string]$data.CPU
+   $script:specLabels['GPU'].Text=[string]$data.GPU
+   $script:specLabels['MEMORY'].Text=[string]$data.Memory
+   $script:specLabels['OS'].Text=[string]$data.OS
+   $script:usageSpecsLoaded=$true
+  }else{throw 'Empty hardware result'}
+ }catch{foreach($v in $script:specLabels.Values){$v.Text='Detection unavailable'};Log "Usage hardware discovery: $($_.Exception.Message)"}
+ $specPoll.Stop();Remove-Job -Job $script:specJob -Force -ErrorAction SilentlyContinue;$script:specJob=$null
+})
+function UpdateUsageSpecs {
+ if($script:usageSpecsLoaded -or $script:specJob){return}
+ try{$script:specJob=Start-Job -ScriptBlock {
+  $cpu='Unavailable';$gpu='Unavailable';$mem='Unavailable';$os='Unavailable'
+  try{$c=Get-CimInstance Win32_Processor -ErrorAction Stop|Select-Object -First 1;if($c){$cpu=([string]$c.Name).Trim()}}catch{}
+  try{$g=Get-CimInstance Win32_VideoController -ErrorAction Stop|Where-Object {$_.Name}|Select-Object -First 1;if($g){$gpu=([string]$g.Name).Trim()}}catch{}
+  try{$o=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop;if($o){$os=[string]$o.Caption;if($o.TotalVisibleMemorySize){$mem=('{0:N1} GB' -f ([double]$o.TotalVisibleMemorySize/1MB))}}}catch{}
+  [pscustomobject]@{CPU=$cpu;GPU=$gpu;Memory=$mem;OS=$os}
+ };$specPoll.Start()}catch{Log "Usage hardware job failed: $($_.Exception.Message)";foreach($v in $script:specLabels.Values){$v.Text='Detection unavailable'}}
+}
+$usageTimer=New-Object Windows.Forms.Timer;$usageTimer.Interval=1400;$usageTimer.Add_Tick({UpdateUsage})
+$usageTab.Add_Enter({UpdateUsageSpecs;UpdateUsage;$usageTimer.Start()})
+$usageTab.Add_Leave({$usageTimer.Stop()})
 
 # User settings and color themes
 $script:SettingsFile=Join-Path $env:APPDATA 'TayTweaks\settings.json';$script:ThemeName='Tay Orange'
