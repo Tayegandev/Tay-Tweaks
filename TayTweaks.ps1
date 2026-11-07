@@ -202,10 +202,10 @@ function RunOutput([string]$title,[string]$cmd) { try {$o=& powershell.exe -NoPr
 
 # Load custom window icon when a companion ICO is present; EXE icon is embedded at build time.
 $script:TayIconPath=Join-Path ([AppDomain]::CurrentDomain.BaseDirectory) 'TayTweaks.ico'
-$form=New-Object System.Windows.Forms.Form;$form.Text="Tay-Tweaks";try{if(Test-Path $script:TayIconPath){$form.Icon=New-Object System.Drawing.Icon($script:TayIconPath)}else{$exePath=[System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName;if([IO.Path]::GetFileName($exePath) -ieq 'TayTweaks.exe'){$form.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon($exePath)}}}catch{};$form.Size=New-Object System.Drawing.Size(1100,820);$form.MinimumSize=New-Object System.Drawing.Size(940,700);$form.StartPosition="CenterScreen";$form.WindowState="Normal";$form.MaximizeBox=$true;$form.MinimizeBox=$true;$form.BackColor=[System.Drawing.Color]::FromArgb(8,8,10);$form.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);$form.Font=New-Object System.Drawing.Font("Segoe UI",9)
-$head=New-Object System.Windows.Forms.Panel;$head.Dock="Top";$head.Height=92;$head.BackColor=[System.Drawing.Color]::FromArgb(18,10,12);$form.Controls.Add($head)
-$ttl=New-Object System.Windows.Forms.Label;$ttl.Text="TAY TWEAKS";$ttl.Font=New-Object System.Drawing.Font("Segoe UI",22,[System.Drawing.FontStyle]::Bold);$ttl.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$ttl.Location=[System.Drawing.Point]::new(22,10);$ttl.AutoSize=$true;$head.Controls.Add($ttl)
-$sub=New-Object System.Windows.Forms.Label;$sub.Text="CPU  •  RAM  •  GPU  •  GAMING  •  WINDOWS  •  DIAGNOSTICS";$sub.ForeColor=[System.Drawing.Color]::FromArgb(190,195,207);$sub.Location=[System.Drawing.Point]::new(25,55);$sub.AutoSize=$true;$head.Controls.Add($sub)
+$form=New-Object System.Windows.Forms.Form;$form.Text="Tay Tweaks v7";try{if(Test-Path $script:TayIconPath){$form.Icon=New-Object System.Drawing.Icon($script:TayIconPath)}else{$exePath=[System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName;if([IO.Path]::GetFileName($exePath) -ieq 'TayTweaks.exe'){$form.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon($exePath)}}}catch{};$form.Size=New-Object System.Drawing.Size(1150,835);$form.MinimumSize=New-Object System.Drawing.Size(1060,730);$form.StartPosition="CenterScreen";$form.WindowState="Normal";$form.MaximizeBox=$true;$form.MinimizeBox=$true;$form.BackColor=[System.Drawing.Color]::FromArgb(8,8,10);$form.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);$form.Font=New-Object System.Drawing.Font("Segoe UI",9);$form.DoubleBuffered=$true
+$head=New-Object System.Windows.Forms.Panel;$head.Dock="Top";$head.Height=84;$head.BackColor=[System.Drawing.Color]::FromArgb(16,16,26);$form.Controls.Add($head)
+$ttl=New-Object System.Windows.Forms.Label;$ttl.Text="Tay Tweaks  /  v7";$ttl.Font=New-Object System.Drawing.Font("Segoe UI",20,[System.Drawing.FontStyle]::Bold);$ttl.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$ttl.Location=[System.Drawing.Point]::new(24,10);$ttl.AutoSize=$true;$head.Controls.Add($ttl)
+$sub=New-Object System.Windows.Forms.Label;$sub.Text="Your performance dashboard  •  System tools  •  Gaming settings";$sub.ForeColor=[System.Drawing.Color]::FromArgb(190,195,207);$sub.Location=[System.Drawing.Point]::new(25,53);$sub.AutoSize=$true;$head.Controls.Add($sub)
 $tabs=New-Object System.Windows.Forms.TabControl;$tabs.Location=[System.Drawing.Point]::new(18,105);$tabs.Size=New-Object System.Drawing.Size(1048,570);$tabs.Anchor="Top,Bottom,Left,Right";$form.Controls.Add($tabs)
 function Tab([string]$name){$p=New-Object System.Windows.Forms.TabPage;$p.Text=$name;$p.BackColor=[System.Drawing.Color]::FromArgb(12,10,12);$p.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);[void]$tabs.TabPages.Add($p);return $p}
 $homeTab=Tab "Home";$tweakTab=Tab "Tweaks";$boostTab=Tab "Game Boost";$usageTab=Tab "Usage";$cleanTab=Tab "Cleanup";$diagTab=Tab "Diagnostics";$netTab=Tab "Network";$aboutTab=Tab "More"
@@ -231,137 +231,7 @@ function TestTayInternet {
   $response=$request.GetResponse();try {return [int]$response.StatusCode -ge 200 -and [int]$response.StatusCode -lt 400}finally{$response.Close()}
  }catch{return $false}
 }
-# Display Manager: supported modes only; custom requests must match a driver-advertised mode.
-$displayTab=Tab "Display Manager";$displayTab.AutoScroll=$true
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class TayDisplay {
- [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
- public struct DEVMODE {
- [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)] public string dmDeviceName;
- public ushort dmSpecVersion,dmDriverVersion,dmSize,dmDriverExtra;
- public uint dmFields;
- public int dmPositionX,dmPositionY;
- public uint dmDisplayOrientation,dmDisplayFixedOutput;
- public short dmColor,dmDuplex,dmYResolution,dmTTOption,dmCollate;
- [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)] public string dmFormName;
- public ushort dmLogPixels;
- public uint dmBitsPerPel,dmPelsWidth,dmPelsHeight,dmDisplayFlags,dmDisplayFrequency,dmICMMethod,dmICMIntent,dmMediaType,dmDitherType,dmReserved1,dmReserved2,dmPanningWidth,dmPanningHeight;
- }
- [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern bool EnumDisplaySettings(string device,int index,ref DEVMODE mode);
- [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int ChangeDisplaySettingsEx(string device,ref DEVMODE mode,IntPtr hwnd,uint flags,IntPtr param);
- public static DEVMODE Blank(){var d=new DEVMODE();d.dmSize=(ushort)Marshal.SizeOf(typeof(DEVMODE));return d;}
- public static DEVMODE Current(){var d=Blank();if(!EnumDisplaySettings(null,-1,ref d))throw new Exception("Cannot read current display mode");return d;}
- public static int Test(DEVMODE d){return ChangeDisplaySettingsEx(null,ref d,IntPtr.Zero,2,IntPtr.Zero);}
- public static int Apply(DEVMODE d){return ChangeDisplaySettingsEx(null,ref d,IntPtr.Zero,0,IntPtr.Zero);}
- public static int Persist(DEVMODE d){return ChangeDisplaySettingsEx(null,ref d,IntPtr.Zero,1,IntPtr.Zero);}
-}
-'@ -ErrorAction Stop
-function DMLabel($text,$x,$y,$w=800){
- $l=New-Object Windows.Forms.Label;$l.Text=$text;$l.Location=[Drawing.Point]::new($x,$y);$l.Size=[Drawing.Size]::new($w,30);$l.ForeColor=[Drawing.Color]::Gainsboro;$displayTab.Controls.Add($l);return $l
-}
-$dmTitle=DMLabel 'DISPLAY MANAGER' 24 18;$dmTitle.Font=New-Object Drawing.Font('Segoe UI',16,[Drawing.FontStyle]::Bold)
-$dmCurrent=DMLabel 'Current display: detecting...' 24 62
-[void](DMLabel 'Mode selection' 24 108)
-$dmKind=New-Object Windows.Forms.ComboBox;$dmKind.DropDownStyle='DropDownList';$dmKind.Location=[Drawing.Point]::new(24,142);$dmKind.Width=230
-[void]$dmKind.Items.AddRange([object[]]@('Windows supported modes','Popular low-FPS presets','Add custom resolution'));$displayTab.Controls.Add($dmKind)
-$dmMode=New-Object Windows.Forms.ComboBox;$dmMode.DropDownStyle='DropDownList';$dmMode.Location=[Drawing.Point]::new(275,142);$dmMode.Width=330;$displayTab.Controls.Add($dmMode)
-[void](DMLabel 'Width' 24 203 110);[void](DMLabel 'Height' 175 203 110);[void](DMLabel 'Refresh rate' 325 203 180)
-$dmW=New-Object Windows.Forms.NumericUpDown;$dmW.Minimum=320;$dmW.Maximum=7680;$dmW.Value=1280;$dmW.Location=[Drawing.Point]::new(24,238);$dmW.Width=120;$displayTab.Controls.Add($dmW)
-$dmH=New-Object Windows.Forms.NumericUpDown;$dmH.Minimum=200;$dmH.Maximum=4320;$dmH.Value=720;$dmH.Location=[Drawing.Point]::new(175,238);$dmH.Width=120;$displayTab.Controls.Add($dmH)
-$dmHz=New-Object Windows.Forms.NumericUpDown;$dmHz.Minimum=1;$dmHz.Maximum=240;$dmHz.Increment=1;$dmHz.Value=60;$dmHz.Location=[Drawing.Point]::new(325,238);$dmHz.Width=140;$displayTab.Controls.Add($dmHz)
-[void](DMLabel 'Custom resolution requests must already be driver-advertised. Unsupported modes are blocked.' 24 286)
-$dmStatus=DMLabel 'Ready.' 24 328
-$dmProfile=DMLabel 'Hardware: not scanned yet' 24 442 800
-$dmInternet=DMLabel 'Internet: not checked' 24 476 800
-$dmScan=New-Object Windows.Forms.Button;$dmScan.Text='Detect my PC + internet';$dmScan.Location=[Drawing.Point]::new(395,380);$dmScan.Size=[Drawing.Size]::new(200,38);$displayTab.Controls.Add($dmScan)
-$dmRefresh=New-Object Windows.Forms.Button;$dmRefresh.Text='Refresh modes';$dmRefresh.Location=[Drawing.Point]::new(24,380);$dmRefresh.Size=[Drawing.Size]::new(150,38);$displayTab.Controls.Add($dmRefresh)
-$dmApply=New-Object Windows.Forms.Button;$dmApply.Text='Apply and confirm';$dmApply.Location=[Drawing.Point]::new(195,380);$dmApply.Size=[Drawing.Size]::new(180,38);$displayTab.Controls.Add($dmApply)
-$script:DMModes=@();$script:DMBusy=$false
-function DMRefresh {
- try{
-  $old=[TayDisplay]::Current();$dmCurrent.Text="Current: $($old.dmPelsWidth) x $($old.dmPelsHeight) @ $($old.dmDisplayFrequency) Hz"
-  $script:DMModes=@();$seen=@{}
-  for($i=0;$i -lt 2048;$i++){
-   $d=[TayDisplay]::Blank();if(-not [TayDisplay]::EnumDisplaySettings($null,$i,[ref]$d)){break}
-   if($d.dmBitsPerPel -lt 24){continue}
-   $key="$($d.dmPelsWidth)x$($d.dmPelsHeight)@$($d.dmDisplayFrequency)"
-   if(-not $seen.ContainsKey($key)){$seen[$key]=$true;$script:DMModes+=,$d}
-  }
-  $dmHz.Maximum=[decimal][math]::Max(240,[int]$old.dmDisplayFrequency)
-  $dmHz.Value=[decimal][math]::Max(1,[int]$old.dmDisplayFrequency)
-  $dmStatus.Text=if($script:DMModes.Count -eq 0){'No driver-advertised modes found. Check your GPU driver.'}else{"$($script:DMModes.Count) driver-advertised modes. Only compatible combinations can be applied."}
-  $dmW.Value=[decimal][Math]::Max(320,[Math]::Min(7680,[int]$old.dmPelsWidth))
-  $dmH.Value=[decimal][Math]::Max(200,[Math]::Min(4320,[int]$old.dmPelsHeight))
-  DMFillModes
- }catch{$dmStatus.Text="Display scan failed: $($_.Exception.Message)";Log $dmStatus.Text}
-}
-function DMFillModes {
- $dmMode.Items.Clear()
- if($dmKind.SelectedIndex -eq 0){foreach($d in $script:DMModes){[void]$dmMode.Items.Add("$($d.dmPelsWidth) x $($d.dmPelsHeight) @ $($d.dmDisplayFrequency) Hz")}}
- if($dmKind.SelectedIndex -eq 1){foreach($p in @('1280x720','1152x648','1024x768','960x540','800x600','640x480')){[void]$dmMode.Items.Add($p)}}
- $dmMode.Enabled=($dmKind.SelectedIndex -ne 2)
- $dmW.Enabled=($dmKind.SelectedIndex -eq 2);$dmH.Enabled=($dmKind.SelectedIndex -eq 2)
- if($dmMode.Items.Count){$dmMode.SelectedIndex=0}
-}
-$dmKind.Add_SelectedIndexChanged({DMFillModes})
-$dmMode.Add_SelectedIndexChanged({
- if($dmMode.SelectedIndex -lt 0){return}
- if($dmKind.SelectedIndex -eq 0){
-  $d=$script:DMModes[$dmMode.SelectedIndex]
-  $dmW.Value=[decimal][Math]::Max(320,[Math]::Min(7680,[int]$d.dmPelsWidth))
-  $dmH.Value=[decimal][Math]::Max(200,[Math]::Min(4320,[int]$d.dmPelsHeight))
-  $dmHz.Maximum=[decimal][math]::Max([int]$dmHz.Maximum,[int]$d.dmDisplayFrequency);$dmHz.Value=[decimal][math]::Max(1,[int]$d.dmDisplayFrequency)
- }elseif($dmKind.SelectedIndex -eq 1){
-  $p=([string]$dmMode.SelectedItem).Split('x');$dmW.Value=[decimal][int]$p[0];$dmH.Value=[decimal][int]$p[1]
- }
-})
-$dmRefresh.Add_Click({DMRefresh})
-$dmScan.Add_Click({
- $dmScan.Enabled=$false
- try {
-  $script:HardwareProfile=GetTayHardwareProfile
-  $p=$script:HardwareProfile
-  $names=(@($p.GPU|ForEach-Object {$_.Name+' (driver '+$_.Driver+')'})) -join '; '
-  $dmProfile.Text="CPU: $($p.CPU) | RAM: $($p.RAM_GB) GB | GPU: $names"
-  $dmProfile.AutoEllipsis=$true
-  DMRefresh
- }catch{$dmProfile.Text="Hardware detection unavailable: $($_.Exception.Message)"}
- $dmInternet.Text=if(TestTayInternet){'Internet: GitHub update endpoint reachable'}else{'Internet: offline, blocked or endpoint unavailable'}
- $dmScan.Enabled=$true
-})
-$dmApply.Add_Click({
- if($script:DMBusy){return};$script:DMBusy=$true
- try{
-  $old=[TayDisplay]::Current()
-  $w=[uint32][int]$dmW.Value;$h=[uint32][int]$dmH.Value
-
-  $hz=[uint32][int]$dmHz.Value;$target=$null
-  foreach($d in $script:DMModes){if($d.dmPelsWidth -eq $w -and $d.dmPelsHeight -eq $h -and $d.dmDisplayFrequency -eq $hz){$target=$d;break}}
-  if($null -eq $target){throw "Unsupported mode: $w x $h @ $hz Hz. Your driver must advertise the mode before Windows can apply it."}
-  $test=[TayDisplay]::Test($target);if($test -ne 0){throw "Windows mode test failed: $test"}
-  if($old.dmPelsWidth -eq $w -and $old.dmPelsHeight -eq $h -and $old.dmDisplayFrequency -eq $hz){$dmStatus.Text='Already using this display mode.';return}
-  $change=[TayDisplay]::Apply($target);if($change -ne 0){throw "Windows rejected mode: $change"}
-  $dialog=New-Object Windows.Forms.Form;$dialog.Text='Keep display settings?';$dialog.StartPosition='CenterScreen';$dialog.TopMost=$true;$dialog.Size=[Drawing.Size]::new(420,190)
-  $notice=New-Object Windows.Forms.Label;$notice.Location=[Drawing.Point]::new(20,20);$notice.Size=[Drawing.Size]::new(375,65);$dialog.Controls.Add($notice)
-  $yes=New-Object Windows.Forms.Button;$yes.Text='Keep changes';$yes.Location=[Drawing.Point]::new(30,100);$yes.Size=[Drawing.Size]::new(150,35);$dialog.Controls.Add($yes)
-  $no=New-Object Windows.Forms.Button;$no.Text='Revert';$no.Location=[Drawing.Point]::new(215,100);$no.Size=[Drawing.Size]::new(150,35);$dialog.Controls.Add($no)
-  $seconds=15;$accepted=$false;$timer=New-Object Windows.Forms.Timer;$timer.Interval=1000
-  $timer.Add_Tick({$seconds--;$notice.Text="Keep $w x $h @ $hz Hz? Reverting in $seconds seconds.";if($seconds -le 0){$dialog.Close()}})
-  $yes.Add_Click({$accepted=$true;$dialog.Close()});$no.Add_Click({$dialog.Close()})
-  $notice.Text="Keep $w x $h @ $hz Hz? Reverting in 15 seconds."
-  $timer.Start();try{[void]$dialog.ShowDialog($form)}finally{$timer.Stop();$timer.Dispose();$dialog.Dispose()}
-  if($accepted){$saved=[TayDisplay]::Persist($target);if($saved -ne 0){[void][TayDisplay]::Apply($old);throw "Windows could not save the selected mode ($saved); the previous resolution was restored."};$dmStatus.Text="Saved $w x $h @ $hz Hz; persists after closing Tay-Tweaks.";Log $dmStatus.Text}
-  else{$revert=[TayDisplay]::Apply($old);if($revert -ne 0){throw "Restore failed: $revert. Use Windows Display settings."};$dmStatus.Text='Previous resolution restored.'}
-  DMRefresh
- }catch{$dmStatus.Text="Display Manager: $($_.Exception.Message)";Log $dmStatus.Text;[Windows.Forms.MessageBox]::Show($dmStatus.Text,'Display Manager')|Out-Null}
- finally{$script:DMBusy=$false}
-})
-$dmKind.SelectedIndex=0
-# Avoid expensive display enumeration and hardware/network probes during app startup.
-$displayTab.Add_Enter({if($script:DMModes.Count -eq 0){DMRefresh}})
-
+# v7: Display Manager removed at user request; Windows Display Settings remain available through Windows.
 $advancedTab.AutoScroll=$true
 $advIntro=New-Object System.Windows.Forms.Label
 $advIntro.Text='ADVANCED PERFORMANCE LAB'
@@ -444,13 +314,13 @@ AdvButton 'Open Game Mode settings' 408 466 {Start-Process 'ms-settings:gaming-g
 $advancedTab.AutoScrollMinSize=[System.Drawing.Size]::new(810,550)
 # Sidebar navigation replaces the default horizontal tab strip.
 $tabs.Appearance='FlatButtons';$tabs.ItemSize=[System.Drawing.Size]::new(0,1);$tabs.SizeMode='Fixed'
-$tabs.Location=[System.Drawing.Point]::new(192,105);$tabs.Size=[System.Drawing.Size]::new(875,570)
-$nav=New-Object System.Windows.Forms.Panel;$nav.Location=[System.Drawing.Point]::new(0,94);$nav.Size=[System.Drawing.Size]::new(186,590);$nav.AutoScroll=$true;$nav.Anchor='Top,Bottom,Left';$nav.BackColor=[System.Drawing.Color]::FromArgb(21,17,20);$form.Controls.Add($nav)
+$tabs.Location=[System.Drawing.Point]::new(204,94);$tabs.Size=[System.Drawing.Size]::new(917,608)
+$nav=New-Object System.Windows.Forms.Panel;$nav.Location=[System.Drawing.Point]::new(0,84);$nav.Size=[System.Drawing.Size]::new(194,620);$nav.AutoScroll=$true;$nav.Anchor='Top,Bottom,Left';$nav.BackColor=[System.Drawing.Color]::FromArgb(21,17,20);$form.Controls.Add($nav)
 $navY=12
 foreach($page in @($tabs.TabPages)){
- $b=New-Object System.Windows.Forms.Button;$b.Text='  '+$page.Text;$b.Tag=$page;$b.TextAlign='MiddleLeft';$b.Location=[System.Drawing.Point]::new(8,$navY);$b.Size=[System.Drawing.Size]::new(169,43);$b.FlatStyle='Flat';$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(32,25,28);$b.ForeColor=[System.Drawing.Color]::FromArgb(255,142,75);$b.Font=New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold);$b.Add_Click({$tabs.SelectedTab=$this.Tag});$nav.Controls.Add($b);$navY+=49
+ $b=New-Object System.Windows.Forms.Button;$b.Text='  '+$page.Text;$b.Tag=$page;$b.TextAlign='MiddleLeft';$b.Location=[System.Drawing.Point]::new(8,$navY);$b.Size=[System.Drawing.Size]::new(175,39);$b.FlatStyle='Flat';$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(32,25,28);$b.ForeColor=[System.Drawing.Color]::FromArgb(255,142,75);$b.Font=New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold);$b.Add_Click({$tabs.SelectedTab=$this.Tag});$nav.Controls.Add($b);$navY+=45
 }
-$nav.AutoScrollMinSize=[System.Drawing.Size]::new(178,$navY+8)
+$nav.AutoScrollMinSize=[System.Drawing.Size]::new(185,$navY+8)
 # Game Boost: temporary per-process priority only. Windows still manages memory allocation.
 $boostTitle=New-Object System.Windows.Forms.Label;$boostTitle.Text="TEMPORARY GAME PRIORITY";$boostTitle.Location=[System.Drawing.Point]::new(24,22);$boostTitle.Size=[System.Drawing.Size]::new(700,34);$boostTitle.Font=New-Object System.Drawing.Font("Segoe UI",18,[System.Drawing.FontStyle]::Bold);$boostTitle.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$boostTab.Controls.Add($boostTitle)
 $boostInfo=New-Object System.Windows.Forms.Label;$boostInfo.Text="Choose a running game and set High priority while it runs. This is temporary and resets when the process closes. Do not use Realtime priority. Windows automatically manages RAM; forcing extra RAM allocation can make crashes and stutters worse.";$boostInfo.Location=[System.Drawing.Point]::new(26,68);$boostInfo.Size=[System.Drawing.Size]::new(930,64);$boostInfo.ForeColor=[System.Drawing.Color]::FromArgb(205,205,215);$boostTab.Controls.Add($boostInfo)
@@ -710,7 +580,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'6.4.1';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'7.0';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
@@ -773,7 +643,7 @@ ToolButton $netTab "Renew DHCP address" "May briefly disconnect you; only use fo
  if($c -eq [System.Windows.Forms.DialogResult]::Yes){$o=(& ipconfig.exe /release 2>&1|Out-String);$o+="`r`n"+(& ipconfig.exe /renew 2>&1|Out-String);Log "DHCP renew requested.";ShowOutput "DHCP renew result" $o}
 }
 $about=New-Object System.Windows.Forms.Label;$about.Location=[System.Drawing.Point]::new(24,24);$about.Size=New-Object System.Drawing.Size(870,450);$about.Font=New-Object System.Drawing.Font("Segoe UI",11)
-$about.Text="TAY TWEAKS v6.4`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
+$about.Text="TAY TWEAKS v7.0`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
 $about.ForeColor=[System.Drawing.Color]::FromArgb(210,214,223);$aboutTab.Controls.Add($about)
 $status=New-Object System.Windows.Forms.Label;$status.Text="Ready • Administrator mode • Restore point required before tweaks";$status.Location=[System.Drawing.Point]::new(22,683);$status.Size=New-Object System.Drawing.Size(900,28);$status.Anchor="Bottom,Left,Right";$status.ForeColor=[System.Drawing.Color]::FromArgb(195,199,210);$form.Controls.Add($status)
 function BottomButton([string]$text,[int]$x,[int]$width){$b=New-Object System.Windows.Forms.Button;$b.Text=$text;$b.Location=[System.Drawing.Point]::new($x,720);$b.Size=New-Object System.Drawing.Size($width,44);$b.Anchor="Bottom,Left";$b.FlatStyle="Flat";$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(255,92,35);$b.ForeColor=[System.Drawing.Color]::FromArgb(20,20,24);$b.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold);$form.Controls.Add($b);return $b}
