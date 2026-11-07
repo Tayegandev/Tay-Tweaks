@@ -1,0 +1,47 @@
+name: Build Tay Tweaks macOS-style UI preview
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build-macos-ui-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout design draft
+        uses: actions/checkout@v4
+        with:
+          ref: v7-macos-frame-draft
+      - name: Validate PowerShell scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($file in @('TayTweaks.ps1','Build-TayTweaks-EXE.ps1','TayUpdater.ps1')){
+            $tokens=$null;$errors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)
+            if($errors.Count){$errors|Out-String|Write-Host;throw "Parser rejected $file"}
+          }
+          $source=Get-Content TayTweaks.ps1 -Raw
+          if($source -notmatch 'FormBorderStyle\]::None'){throw 'Custom window frame missing'}
+          if($source -notmatch 'AddTayWindowDot'){throw 'Window controls missing'}
+          if($source -match 'Tab "Display Manager"'){throw 'Display Manager unexpectedly present'}
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Install-Module ps2exe -Scope CurrentUser -Force
+          & ./Build-TayTweaks-EXE.ps1
+          if(!(Test-Path TayTweaks.exe)){throw 'Build output missing'}
+          Get-FileHash TayTweaks.exe -Algorithm SHA256 | Format-List
+      - name: Package preview
+        shell: pwsh
+        run: |
+          Compress-Archive -Path TayTweaks.exe,TayUpdater.ps1,TayTweaks.ico -DestinationPath TayTweaks-macOS-UI-preview.zip -Force
+      - name: Upload preview ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: TayTweaks-macOS-UI-preview
+          path: TayTweaks-macOS-UI-preview.zip
+          if-no-files-found: error
