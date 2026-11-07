@@ -238,32 +238,49 @@ $script:TayDragWindow={
  [void][TayWindowNative]::ReleaseCapture()
  [void][TayWindowNative]::SendMessage($form.Handle,0xA1,[IntPtr]2,[IntPtr]::Zero)
 }
-function AddTayWindowDot([string]$action,[Drawing.Color]$color,[int]$x,[string]$symbol) {
+# Windows-inspired caption controls with a borderless WinForms window.
+function AddTayCaptionButton([string]$action,[string]$glyph,[int]$fromRight) {
  $btn=New-Object Windows.Forms.Button
- $btn.Name='TayFrame'+$action;$btn.Text='';$btn.Tag=$color
- $btn.Location=[Drawing.Point]::new($x,28);$btn.Size=[Drawing.Size]::new(16,16)
- $btn.FlatStyle='Flat';$btn.FlatAppearance.BorderSize=0;$btn.BackColor=$color
- $btn.ForeColor=[Drawing.Color]::FromArgb(35,35,45);$btn.Font=New-Object Drawing.Font('Segoe UI',8,[Drawing.FontStyle]::Bold)
- $btn.Add_MouseEnter({$original=[Drawing.Color]$this.Tag;$this.BackColor=[Drawing.Color]::FromArgb([int]($original.R*0.82),[int]($original.G*0.82),[int]($original.B*0.82));$this.Text=[string]$this.AccessibleDescription})
- $btn.Add_MouseLeave({$this.BackColor=[Drawing.Color]$this.Tag;$this.Text=''})
- $btn.AccessibleDescription=$symbol
+ $btn.Name='TayFrame'+$action
+ $btn.Text=$glyph
+ $btn.AccessibleName=$action
+ $btn.Tag='TayCaptionButton'
+ $btn.Size=[Drawing.Size]::new(47,33)
+ $btn.Location=[Drawing.Point]::new(($head.ClientSize.Width-$fromRight),0)
+ $btn.Anchor=[Windows.Forms.AnchorStyles]::Top -bor [Windows.Forms.AnchorStyles]::Right
+ $btn.FlatStyle='Flat';$btn.FlatAppearance.BorderSize=0
+ $btn.BackColor=[Drawing.Color]::FromArgb(16,16,26)
+ $btn.ForeColor=[Drawing.Color]::FromArgb(230,232,243)
+ $btn.Font=New-Object Drawing.Font('Segoe UI Symbol',10,[Drawing.FontStyle]::Regular)
+ $btn.TabStop=$true
+ $btn.Add_MouseEnter({
+  if($this.Name -eq 'TayFrameClose'){$this.BackColor=[Drawing.Color]::FromArgb(232,61,67)}
+  else{$this.BackColor=[Drawing.Color]::FromArgb(53,49,72)}
+ })
+ $btn.Add_MouseLeave({$this.BackColor=$head.BackColor})
  $btn.Add_Click({
-  switch($this.Name){
+  switch($this.Name) {
    'TayFrameClose' {$form.Close()}
    'TayFrameMinimize' {$form.WindowState=[Windows.Forms.FormWindowState]::Minimized}
-   'TayFrameMaximize' {if($form.WindowState -eq [Windows.Forms.FormWindowState]::Maximized){$form.WindowState=[Windows.Forms.FormWindowState]::Normal}else{$form.WindowState=[Windows.Forms.FormWindowState]::Maximized}}
+   'TayFrameMaximize' {
+    if($form.WindowState -eq [Windows.Forms.FormWindowState]::Maximized){$form.WindowState=[Windows.Forms.FormWindowState]::Normal}
+    else{$form.WindowState=[Windows.Forms.FormWindowState]::Maximized}
+   }
   }
  })
  $head.Controls.Add($btn)
  return $btn
 }
 $head=New-Object System.Windows.Forms.Panel;$head.Dock="Top";$head.Height=84;$head.BackColor=[System.Drawing.Color]::FromArgb(16,16,26);$form.Controls.Add($head)
-$ttl=New-Object System.Windows.Forms.Label;$ttl.Text="Tay Tweaks";$ttl.Font=New-Object System.Drawing.Font("Segoe UI",20,[System.Drawing.FontStyle]::Bold);$ttl.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$ttl.Location=[System.Drawing.Point]::new(130,12);$ttl.AutoSize=$true;$head.Controls.Add($ttl)
-$sub=New-Object System.Windows.Forms.Label;$sub.Text="Your performance dashboard  •  System tools  •  Gaming settings";$sub.ForeColor=[System.Drawing.Color]::FromArgb(190,195,207);$sub.Location=[System.Drawing.Point]::new(131,53);$sub.AutoSize=$true;$head.Controls.Add($sub)
-# macOS-inspired traffic-light window buttons; dot controls remain separate from page styling.
-$frameClose=AddTayWindowDot 'Close' ([Drawing.Color]::FromArgb(255,95,86)) 23 '×'
-$frameMin=AddTayWindowDot 'Minimize' ([Drawing.Color]::FromArgb(255,189,46)) 48 '−'
-$frameMax=AddTayWindowDot 'Maximize' ([Drawing.Color]::FromArgb(39,201,63)) 73 '+'
+$ttl=New-Object System.Windows.Forms.Label;$ttl.Text="Tay Tweaks";$ttl.Font=New-Object System.Drawing.Font("Segoe UI",20,[System.Drawing.FontStyle]::Bold);$ttl.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$ttl.Location=[System.Drawing.Point]::new(24,12);$ttl.AutoSize=$true;$head.Controls.Add($ttl)
+$sub=New-Object System.Windows.Forms.Label;$sub.Text="Your performance dashboard  •  System tools  •  Gaming settings";$sub.ForeColor=[System.Drawing.Color]::FromArgb(190,195,207);$sub.Location=[System.Drawing.Point]::new(25,53);$sub.AutoSize=$true;$head.Controls.Add($sub)
+# Windows caption order on the top right: minimize, maximize/restore, close.
+$frameMin=AddTayCaptionButton 'Minimize' ([string][char]0x2014) 141
+$frameMax=AddTayCaptionButton 'Maximize' ([string][char]0x25A1) 94
+$frameClose=AddTayCaptionButton 'Close' ([string][char]0x00D7) 47
+$form.Add_Resize({
+ if($frameMax){$frameMax.Text=if($form.WindowState -eq [Windows.Forms.FormWindowState]::Maximized){[string][char]0x2750}else{[string][char]0x25A1}}
+})
 $head.Add_MouseDown($script:TayDragWindow)
 $ttl.Add_MouseDown($script:TayDragWindow)
 $sub.Add_MouseDown($script:TayDragWindow)
@@ -735,7 +752,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'8.0';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'8.1';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
@@ -798,7 +815,7 @@ ToolButton $netTab "Renew DHCP address" "May briefly disconnect you; only use fo
  if($c -eq [System.Windows.Forms.DialogResult]::Yes){$o=(& ipconfig.exe /release 2>&1|Out-String);$o+="`r`n"+(& ipconfig.exe /renew 2>&1|Out-String);Log "DHCP renew requested.";ShowOutput "DHCP renew result" $o}
 }
 $about=New-Object System.Windows.Forms.Label;$about.Location=[System.Drawing.Point]::new(24,24);$about.Size=New-Object System.Drawing.Size(870,450);$about.Font=New-Object System.Drawing.Font("Segoe UI",11)
-$about.Text="TAY TWEAKS v8.0`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
+$about.Text="TAY TWEAKS v8.1`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
 $about.ForeColor=[System.Drawing.Color]::FromArgb(210,214,223);$aboutTab.Controls.Add($about)
 $status=New-Object System.Windows.Forms.Label;$status.Text="Ready • Administrator mode • Restore point required before tweaks";$status.Location=[System.Drawing.Point]::new(22,683);$status.Size=New-Object System.Drawing.Size(900,28);$status.Anchor="Bottom,Left,Right";$status.ForeColor=[System.Drawing.Color]::FromArgb(195,199,210);$form.Controls.Add($status)
 function BottomButton([string]$text,[int]$x,[int]$width){$b=New-Object System.Windows.Forms.Button;$b.Text=$text;$b.Location=[System.Drawing.Point]::new($x,720);$b.Size=New-Object System.Drawing.Size($width,44);$b.Anchor="Bottom,Left";$b.FlatStyle="Flat";$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(255,92,35);$b.ForeColor=[System.Drawing.Color]::FromArgb(20,20,24);$b.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold);$form.Controls.Add($b);return $b}
