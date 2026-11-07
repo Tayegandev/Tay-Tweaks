@@ -202,10 +202,76 @@ function RunOutput([string]$title,[string]$cmd) { try {$o=& powershell.exe -NoPr
 
 # Load custom window icon when a companion ICO is present; EXE icon is embedded at build time.
 $script:TayIconPath=Join-Path ([AppDomain]::CurrentDomain.BaseDirectory) 'TayTweaks.ico'
-$form=New-Object System.Windows.Forms.Form;$form.Text="Tay Tweaks v7";try{if(Test-Path $script:TayIconPath){$form.Icon=New-Object System.Drawing.Icon($script:TayIconPath)}else{$exePath=[System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName;if([IO.Path]::GetFileName($exePath) -ieq 'TayTweaks.exe'){$form.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon($exePath)}}}catch{};$form.Size=New-Object System.Drawing.Size(1150,835);$form.MinimumSize=New-Object System.Drawing.Size(1060,730);$form.StartPosition="CenterScreen";$form.WindowState="Normal";$form.MaximizeBox=$true;$form.MinimizeBox=$true;$form.BackColor=[System.Drawing.Color]::FromArgb(8,8,10);$form.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);$form.Font=New-Object System.Drawing.Font("Segoe UI",9)
+$form=New-Object System.Windows.Forms.Form;$form.Text="Tay Tweaks";try{if(Test-Path $script:TayIconPath){$form.Icon=New-Object System.Drawing.Icon($script:TayIconPath)}else{$exePath=[System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName;if([IO.Path]::GetFileName($exePath) -ieq 'TayTweaks.exe'){$form.Icon=[System.Drawing.Icon]::ExtractAssociatedIcon($exePath)}}}catch{};$form.Size=New-Object System.Drawing.Size(1150,835);$form.MinimumSize=New-Object System.Drawing.Size(1060,730);$form.StartPosition="CenterScreen";$form.WindowState="Normal";$form.MaximizeBox=$true;$form.MinimizeBox=$true;$form.BackColor=[System.Drawing.Color]::FromArgb(8,8,10);$form.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);$form.Font=New-Object System.Drawing.Font("Segoe UI",9)
+# v7 design draft: custom frame replaces the OS caption, while retaining the ordinary WinForms backend.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class TayWindowNative {
+ [DllImport("user32.dll")] public static extern bool ReleaseCapture();
+ [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+ [DllImport("user32.dll")] public static extern bool ShowScrollBar(IntPtr hwnd, int wBar, bool bShow);
+}
+'@
+$form.FormBorderStyle=[Windows.Forms.FormBorderStyle]::None
+$form.Padding=New-Object Windows.Forms.Padding(1)
+$form.KeyPreview=$true
+function SetTayWindowCorners {
+ if(-not $form.IsHandleCreated){return}
+ $radius=if($form.WindowState -eq [Windows.Forms.FormWindowState]::Maximized){0}else{12}
+ if($form.Width -le 20 -or $form.Height -le 20){return}
+ $path=New-Object Drawing.Drawing2D.GraphicsPath
+ if($radius -le 0){$path.AddRectangle([Drawing.Rectangle]::new(0,0,$form.Width,$form.Height))}else{
+  $d=$radius*2
+  $path.AddArc(0,0,$d,$d,180,90);$path.AddArc(($form.Width-$d),0,$d,$d,270,90)
+  $path.AddArc(($form.Width-$d),($form.Height-$d),$d,$d,0,90)
+  $path.AddArc(0,($form.Height-$d),$d,$d,90,90);$path.CloseFigure()
+ }
+ $old=$form.Region;$form.Region=New-Object Drawing.Region($path);$path.Dispose();if($old){$old.Dispose()}
+}
+$form.Add_Shown({SetTayWindowCorners})
+$form.Add_Resize({SetTayWindowCorners})
+$script:TayDragWindow={
+ param($sender,$e)
+ if($e.Button -ne [Windows.Forms.MouseButtons]::Left){return}
+ if($form.WindowState -eq [Windows.Forms.FormWindowState]::Maximized){return}
+ [void][TayWindowNative]::ReleaseCapture()
+ [void][TayWindowNative]::SendMessage($form.Handle,0xA1,[IntPtr]2,[IntPtr]::Zero)
+}
+function AddTayWindowDot([string]$action,[Drawing.Color]$color,[int]$x,[string]$symbol) {
+ $btn=New-Object Windows.Forms.Button
+ $btn.Name='TayFrame'+$action;$btn.Text='';$btn.Tag='TayFrame'
+ $btn.Location=[Drawing.Point]::new($x,28);$btn.Size=[Drawing.Size]::new(16,16)
+ $btn.FlatStyle='Flat';$btn.FlatAppearance.BorderSize=0;$btn.BackColor=$color
+ $btn.ForeColor=[Drawing.Color]::FromArgb(35,35,45);$btn.Font=New-Object Drawing.Font('Segoe UI',8,[Drawing.FontStyle]::Bold)
+ $btn.Add_MouseEnter({$this.BackColor=[Drawing.Color]::FromArgb([int]($this.BackColor.R*0.82),[int]($this.BackColor.G*0.82),[int]($this.BackColor.B*0.82));$this.Text=[string]$this.AccessibleDescription})
+ $btn.Add_MouseLeave({$this.BackColor=[Drawing.Color]::FromArgb([int]$this.AccessibleDefaultAction.Split(',')[0],[int]$this.AccessibleDefaultAction.Split(',')[1],[int]$this.AccessibleDefaultAction.Split(',')[2]);$this.Text=''})
+ $btn.AccessibleDescription=$symbol;$btn.AccessibleDefaultAction="$($color.R),$($color.G),$($color.B)"
+ $btn.Add_Click({
+  switch($this.Name){
+   'TayFrameClose' {$form.Close()}
+   'TayFrameMinimize' {$form.WindowState=[Windows.Forms.FormWindowState]::Minimized}
+   'TayFrameMaximize' {if($form.WindowState -eq [Windows.Forms.FormWindowState]::Maximized){$form.WindowState=[Windows.Forms.FormWindowState]::Normal}else{$form.WindowState=[Windows.Forms.FormWindowState]::Maximized}}
+  }
+ })
+ $head.Controls.Add($btn)
+ return $btn
+}
 $head=New-Object System.Windows.Forms.Panel;$head.Dock="Top";$head.Height=84;$head.BackColor=[System.Drawing.Color]::FromArgb(16,16,26);$form.Controls.Add($head)
-$ttl=New-Object System.Windows.Forms.Label;$ttl.Text="Tay Tweaks  /  v7";$ttl.Font=New-Object System.Drawing.Font("Segoe UI",20,[System.Drawing.FontStyle]::Bold);$ttl.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$ttl.Location=[System.Drawing.Point]::new(24,10);$ttl.AutoSize=$true;$head.Controls.Add($ttl)
-$sub=New-Object System.Windows.Forms.Label;$sub.Text="Your performance dashboard  •  System tools  •  Gaming settings";$sub.ForeColor=[System.Drawing.Color]::FromArgb(190,195,207);$sub.Location=[System.Drawing.Point]::new(25,53);$sub.AutoSize=$true;$head.Controls.Add($sub)
+$ttl=New-Object System.Windows.Forms.Label;$ttl.Text="Tay Tweaks";$ttl.Font=New-Object System.Drawing.Font("Segoe UI",20,[System.Drawing.FontStyle]::Bold);$ttl.ForeColor=[System.Drawing.Color]::FromArgb(255,92,35);$ttl.Location=[System.Drawing.Point]::new(130,12);$ttl.AutoSize=$true;$head.Controls.Add($ttl)
+$sub=New-Object System.Windows.Forms.Label;$sub.Text="Your performance dashboard  •  System tools  •  Gaming settings";$sub.ForeColor=[System.Drawing.Color]::FromArgb(190,195,207);$sub.Location=[System.Drawing.Point]::new(131,53);$sub.AutoSize=$true;$head.Controls.Add($sub)
+# macOS-inspired traffic-light window buttons; dot controls remain separate from page styling.
+$frameClose=AddTayWindowDot 'Close' ([Drawing.Color]::FromArgb(255,95,86)) 23 '×'
+$frameMin=AddTayWindowDot 'Minimize' ([Drawing.Color]::FromArgb(255,189,46)) 48 '−'
+$frameMax=AddTayWindowDot 'Maximize' ([Drawing.Color]::FromArgb(39,201,63)) 73 '+'
+$head.Add_MouseDown($script:TayDragWindow)
+$ttl.Add_MouseDown($script:TayDragWindow)
+$sub.Add_MouseDown($script:TayDragWindow)
+$head.Add_DoubleClick({if($form.WindowState -eq [Windows.Forms.FormWindowState]::Maximized){$form.WindowState=[Windows.Forms.FormWindowState]::Normal}else{$form.WindowState=[Windows.Forms.FormWindowState]::Maximized}})
+# Bottom-right resize grip, while respecting the window's MinimumSize.
+$resizeGrip=New-Object Windows.Forms.Panel;$resizeGrip.Size=[Drawing.Size]::new(19,19);$resizeGrip.Anchor='Bottom,Right';$resizeGrip.Location=[Drawing.Point]::new(($form.ClientSize.Width-21),($form.ClientSize.Height-21))
+$resizeGrip.Cursor=[Windows.Forms.Cursors]::SizeNWSE;$resizeGrip.BackColor=[Drawing.Color]::Transparent;$form.Controls.Add($resizeGrip);$resizeGrip.BringToFront()
+$resizeGrip.Add_MouseDown({param($sender,$e);if($e.Button -eq [Windows.Forms.MouseButtons]::Left -and $form.WindowState -eq [Windows.Forms.FormWindowState]::Normal){[void][TayWindowNative]::ReleaseCapture();[void][TayWindowNative]::SendMessage($form.Handle,0xA1,[IntPtr]17,[IntPtr]::Zero)}})
 $tabs=New-Object System.Windows.Forms.TabControl;$tabs.Location=[System.Drawing.Point]::new(18,105);$tabs.Size=New-Object System.Drawing.Size(1048,570);$tabs.Anchor="Top,Bottom,Left,Right";$form.Controls.Add($tabs)
 function Tab([string]$name){$p=New-Object System.Windows.Forms.TabPage;$p.Text=$name;$p.BackColor=[System.Drawing.Color]::FromArgb(12,10,12);$p.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);[void]$tabs.TabPages.Add($p);return $p}
 $homeTab=Tab "Home";$tweakTab=Tab "Tweaks";$boostTab=Tab "Game Boost";$usageTab=Tab "Usage";$cleanTab=Tab "Cleanup";$diagTab=Tab "Diagnostics";$netTab=Tab "Network";$aboutTab=Tab "More"
