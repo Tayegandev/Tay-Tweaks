@@ -473,13 +473,20 @@ $usageGraphTitle=New-Object Windows.Forms.Label;$usageGraphTitle.Text='Activity 
 $usageChartChoice=New-Object Windows.Forms.ComboBox;$usageChartChoice.DropDownStyle='DropDownList';$usageChartChoice.Items.AddRange([object[]]@('CPU','GPU','RAM'));$usageChartChoice.SelectedIndex=0;$usageChartChoice.Location=[Drawing.Point]::new(353,14);$usageChartChoice.Size=[Drawing.Size]::new(110,28);$usageChart.Controls.Add($usageChartChoice)
 $usageChart.Add_Paint({param($sender,$e)
  $g=$e.Graphics;$g.SmoothingMode='AntiAlias'
+ $left=18;$right=[math]::Max(28,$sender.ClientSize.Width-18)
+ $top=65;$bottom=[math]::Max(110,$sender.ClientSize.Height-23)
+ $graphW=[math]::Max(1,$right-$left);$graphH=[math]::Max(1,$bottom-$top)
  $gridPen=New-Object Drawing.Pen([Drawing.Color]::FromArgb(47,50,69),1)
- for($i=0;$i -lt 5;$i++){$y=70+$i*46;$g.DrawLine($gridPen,17,$y,464,$y)}
+ for($i=0;$i -le 4;$i++){$y=$top+($i*$graphH/4);$g.DrawLine($gridPen,[single]$left,[single]$y,[single]$right,[single]$y)}
  $samples=@($script:usageHistory[[string]$usageChartChoice.SelectedItem])
  if($samples.Count -gt 1){
   $accent=[Drawing.ColorTranslator]::FromHtml($script:Themes[$script:ThemeName]);$pen=New-Object Drawing.Pen($accent,2)
   $pts=New-Object 'System.Collections.Generic.List[System.Drawing.PointF]'
-  for($i=0;$i -lt $samples.Count;$i++){$xx=18+($i*446.0/79);$yy=254-([double]$samples[$i]*1.84);$pts.Add([Drawing.PointF]::new([single]$xx,[single]$yy))}
+  for($i=0;$i -lt $samples.Count;$i++){
+   $xx=$left+($i*$graphW/79)
+   $yy=$bottom-([math]::Max(0,[math]::Min(100,[double]$samples[$i]))*$graphH/100)
+   $pts.Add([Drawing.PointF]::new([single]$xx,[single]$yy))
+  }
   if($pts.Count -gt 1){$g.DrawLines($pen,$pts.ToArray())}
   $pen.Dispose()
  }
@@ -487,10 +494,10 @@ $usageChart.Add_Paint({param($sender,$e)
 })
 $usageChartChoice.Add_SelectedIndexChanged({$usageChart.Invalidate()})
 $usageFoot=New-Object Windows.Forms.Label;$usageFoot.Text='GPU and temperature readings depend on Windows driver support. Hardware details are read separately.';$usageFoot.Location=[Drawing.Point]::new(18,552);$usageFoot.Size=[Drawing.Size]::new(800,30);$usageFoot.ForeColor=[Drawing.Color]::Silver;$usageTab.Controls.Add($usageFoot)
-$usageTab.AutoScrollMinSize=[Drawing.Size]::new(858,588)
+$usageTab.AutoScrollMinSize=[Drawing.Size]::Empty
 function SetUsageReading([string]$key,[int]$value,[string]$description){
  $value=[math]::Max(0,[math]::Min(100,$value));$script:usageGaugeValues[$key]=$value;$script:usageAvailable[$key]=$true
- $usageLabels[$key].Text=$description;$usageValues[$key].Text="$value%";$usageBars[$key].Width=[int](227*$value/100)
+ $usageLabels[$key].Text=$description;$usageValues[$key].Text="$value%";$usageBars[$key].Width=[int]($usageBars[$key].Parent.ClientSize.Width*$value/100)
  $series=switch($key){'cpu'{'CPU'}'gpu'{'GPU'}'ram'{'RAM'}default{''}}
  if($series){$hist=$script:usageHistory[$series];[void]$hist.Add($value);if($hist.Count -gt 80){$hist.RemoveAt(0)}}
 }
@@ -752,7 +759,7 @@ $themePicker=New-Object System.Windows.Forms.ComboBox;$themePicker.DropDownStyle
 $themePicker.Add_SelectedIndexChanged({$script:ThemeName=[string]$themePicker.SelectedItem;SaveTheme;ApplyTheme})
 PageLabel $settingsTab 'UPDATES / GITHUB' 24 162 | Out-Null
 $updateStatus=PageLabel $settingsTab 'Update status: Not checked' 24 205
-$script:AppVersion=[version]'8.1';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
+$script:AppVersion=[version]'8.1.1';$script:UpdateUrl='https://raw.githubusercontent.com/Tayegandev/Tay-Tweaks/main/latest.json';$script:UpdateBusy=$false
 function CheckTayUpdates([bool]$showNoUpdates=$false){
  if($script:UpdateBusy){return};$script:UpdateBusy=$true
  try{
@@ -815,7 +822,7 @@ ToolButton $netTab "Renew DHCP address" "May briefly disconnect you; only use fo
  if($c -eq [System.Windows.Forms.DialogResult]::Yes){$o=(& ipconfig.exe /release 2>&1|Out-String);$o+="`r`n"+(& ipconfig.exe /renew 2>&1|Out-String);Log "DHCP renew requested.";ShowOutput "DHCP renew result" $o}
 }
 $about=New-Object System.Windows.Forms.Label;$about.Location=[System.Drawing.Point]::new(24,24);$about.Size=New-Object System.Drawing.Size(870,450);$about.Font=New-Object System.Drawing.Font("Segoe UI",11)
-$about.Text="TAY TWEAKS v8.1`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
+$about.Text="TAY TWEAKS v8.1.1`r`n`r`nBuilt for Windows 10/11, including older systems such as Intel Core i5-4590 / 16 GB RAM / Intel HD 4600.`r`n`r`nInspired by common categories found in public PC optimization tools; this is an original implementation, not copied proprietary code.`r`n`r`nSafety:`r`n• Administrator mode for system actions.`r`n• A successful restore point is required before registry tweaks.`r`n• Previous values of modified registry entries are saved for Undo.`r`n• Cleanup/network actions confirm potentially destructive actions.`r`n`r`nReality check:`r`n• No tweak guarantees more FPS or lower ping.`r`n• Avoid disabling Defender, Windows Update, or random services.`r`n• Intel HD 4600 is an older integrated GPU; in-game settings and background apps usually matter more than obscure registry edits.`r`n• Usage readings depend on Windows drivers; CPU/GPU temperatures may not be exposed.`r`n`r`nBackup/log path: $DataDir"
 $about.ForeColor=[System.Drawing.Color]::FromArgb(210,214,223);$aboutTab.Controls.Add($about)
 $status=New-Object System.Windows.Forms.Label;$status.Text="Ready • Administrator mode • Restore point required before tweaks";$status.Location=[System.Drawing.Point]::new(22,683);$status.Size=New-Object System.Drawing.Size(900,28);$status.Anchor="Bottom,Left,Right";$status.ForeColor=[System.Drawing.Color]::FromArgb(195,199,210);$form.Controls.Add($status)
 function BottomButton([string]$text,[int]$x,[int]$width){$b=New-Object System.Windows.Forms.Button;$b.Text=$text;$b.Location=[System.Drawing.Point]::new($x,720);$b.Size=New-Object System.Drawing.Size($width,44);$b.Anchor="Bottom,Left";$b.FlatStyle="Flat";$b.FlatAppearance.BorderSize=0;$b.BackColor=[System.Drawing.Color]::FromArgb(255,92,35);$b.ForeColor=[System.Drawing.Color]::FromArgb(20,20,24);$b.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold);$form.Controls.Add($b);return $b}
@@ -849,23 +856,84 @@ $exit.Add_Click({if($slimScrollTimer){$slimScrollTimer.Stop()};$usageTimer.Stop(
 ApplyTheme
 
 # Adaptive dashboard grid: three equal metric cards, then System / Activity cards.
+# Responsive performance dashboard: fill available page width and height.
+# Recalculate only when dimensions actually change to avoid redraw loops.
+$script:tayDashboardLayoutBusy=$false
 function SetTayDashboardLayout {
- if(-not $usageTab -or $usageTab.IsDisposed){return}
- $w=[math]::Max(835,$usageTab.ClientSize.Width-8)
- $gap=12;$margin=14;$cardW=[int][math]::Floor(($w-2*$margin-2*$gap)/3)
- foreach($pair in @(@('cpu',0),@('gpu',1),@('ram',2))){
-  $card=$usageGaugePanels[[string]$pair[0]];$card.Width=$cardW
-  $card.Left=$margin+([int]$pair[1]*($cardW+$gap))
- }
- $sysW=[int][math]::Floor(($w-2*$margin-$gap)*0.39)
- $usageInfo.Left=$margin;$usageInfo.Width=$sysW
- $usageChart.Left=$margin+$sysW+$gap
- $usageChart.Width=$w-2*$margin-$gap-$sysW
- $usageChartChoice.Left=[math]::Max(215,$usageChart.Width-128)
- foreach($k in @('CPU','GPU','MEMORY','OS')){$script:specLabels[$k].Width=[math]::Max(100,$sysW-38)}
- $usageChart.Invalidate()
+ if(-not $usageTab -or $usageTab.IsDisposed -or $script:tayDashboardLayoutBusy){return}
+ if($usageTab.ClientSize.Width -lt 120 -or $usageTab.ClientSize.Height -lt 120){return}
+ $script:tayDashboardLayoutBusy=$true
+ $usageTab.SuspendLayout()
+ try {
+  $margin=16;$gap=16
+  # The horizontal grid uses the actual tab viewport, never the form's old design width.
+  $viewW=[int]$usageTab.ClientSize.Width
+  $viewH=[int]$usageTab.ClientSize.Height
+  $contentW=[math]::Max(780,($viewW-2*$margin))
+  $topY=82
+  $cardH=[int][math]::Max(182,[math]::Min(232,($viewH*0.26)))
+  $cardW=[int][math]::Floor(($contentW-2*$gap)/3)
+  for($i=0;$i -lt 3;$i++){
+   $key=@('cpu','gpu','ram')[$i]
+   $card=$usageGaugePanels[$key]
+   $card.Location=[Drawing.Point]::new(($margin+$i*($cardW+$gap)),$topY)
+   $card.Size=[Drawing.Size]::new($cardW,$cardH)
+   # Stretch the text, progress track and fill to the same grid column.
+   foreach($child in @($card.Controls)){
+    if($child -is [Windows.Forms.Label]){$child.Width=[math]::Max(120,$cardW-36)}
+    elseif($child -is [Windows.Forms.Panel]){
+     $child.Width=[math]::Max(70,$cardW-36)
+     $child.Top=$cardH-29
+    }
+   }
+   $track=$usageBars[$key].Parent
+   $usageBars[$key].Width=[int]($track.ClientSize.Width*[math]::Max(0,[math]::Min(100,$script:usageGaugeValues[$key]))/100)
+   SetTayRounded $card 17
+  }
+  $bottomY=$topY+$cardH+$gap
+  $bottomH=[int][math]::Max(280,($viewH-$bottomY-56))
+  $systemW=[int][math]::Floor(($contentW-$gap)*0.36)
+  $chartW=[int]($contentW-$systemW-$gap)
+  $usageInfo.Bounds=[Drawing.Rectangle]::new($margin,$bottomY,$systemW,$bottomH)
+  $usageChart.Bounds=[Drawing.Rectangle]::new(($margin+$systemW+$gap),$bottomY,$chartW,$bottomH)
+  $usageChartChoice.Left=[math]::Max(200,($chartW-$usageChartChoice.Width-18))
+  $sysTitle.Width=[math]::Max(120,$systemW-36)
+  $usageGraphTitle.Width=[math]::Max(160,$chartW-160)
+  $rowStep=[int][math]::Max(56,[math]::Floor(($bottomH-70)/4))
+  $labelNames=@('CPU','GPU','MEMORY','OS')
+  for($i=0;$i -lt $labelNames.Count;$i++){
+   $y=49+$i*$rowStep
+   $key=$labelNames[$i]
+   $valueLabel=$script:specLabels[$key]
+   $valueLabel.Location=[Drawing.Point]::new(19,($y+19))
+   $valueLabel.Size=[Drawing.Size]::new(([math]::Max(120,$systemW-38)),40)
+   # The category heading is immediately above its corresponding value label.
+   foreach($control in @($usageInfo.Controls)){
+    if($control -is [Windows.Forms.Label] -and $control -ne $sysTitle -and $control.Text -eq $key){
+     $control.Location=[Drawing.Point]::new(19,$y)
+     $control.Width=[math]::Max(120,$systemW-38)
+    }
+   }
+  }
+  $usageFoot.Location=[Drawing.Point]::new($margin,($bottomY+$bottomH+9))
+  $usageFoot.Width=$contentW
+  $usageIntro.Width=$contentW
+  $usageSubtitle.Width=$contentW
+  # Allow scrolling only where the window is physically too small for the cards.
+  $neededH=$bottomY+$bottomH+43
+  $usageTab.AutoScrollMinSize=[Drawing.Size]::new(
+    $(if($contentW -gt ($viewW-2*$margin)){$contentW+2*$margin}else{0}),
+    $(if($neededH -gt $viewH){$neededH}else{0})
+  )
+  SetTayRounded $usageInfo 17
+  SetTayRounded $usageChart 17
+  $usageChart.Invalidate()
+ }catch{Log "Responsive Usage layout: $($_.Exception.Message)"}
+ finally{$usageTab.ResumeLayout($false);$script:tayDashboardLayoutBusy=$false}
 }
 $usageTab.Add_SizeChanged({SetTayDashboardLayout})
+$usageTab.Add_Enter({SetTayDashboardLayout})
+$form.Add_Resize({if($tabs.SelectedTab -eq $usageTab){SetTayDashboardLayout}})
 $script:TayCardBorder={
  param($sender,$e)
  if($sender.Width -lt 16 -or $sender.Height -lt 16){return}
