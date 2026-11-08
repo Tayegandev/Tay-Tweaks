@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Assets\TMACs.ico</ApplicationIcon>
+    <AssemblyName>TMACs</AssemblyName>
+    <RootNamespace>TMACs</RootNamespace>
+    <Version>1.0.0</Version>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+</Project>

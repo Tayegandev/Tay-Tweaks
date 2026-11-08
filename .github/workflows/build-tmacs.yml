@@ -1,0 +1,44 @@
+name: Build TMAC's Windows EXE
+on:
+  push:
+    branches: [tmacs-app]
+    paths:
+      - 'TMACs/**'
+      - '.github/workflows/build-tmacs.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    name: Portable Windows EXE
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: TMACs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate branded icon
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python Assets/make_icon.py
+      - name: Publish portable EXE
+        run: dotnet publish TMACs.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+      - name: Copy icon and documentation
+        run: |
+          Copy-Item Assets/TMACs.ico publish/TMACs.ico
+          Copy-Item README.md publish/README.md
+        shell: pwsh
+      - name: Package portable build
+        run: Compress-Archive -Path publish/* -DestinationPath TMACs-v1.0.0-Windows-x64.zip -Force
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TMACs-v1.0.0-Windows-x64
+          path: TMACs/TMACs-v1.0.0-Windows-x64.zip
+          if-no-files-found: error
