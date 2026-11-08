@@ -6,6 +6,8 @@ public sealed class MacroStep
 {
     public string Kind { get; set; } = "KeyDown";
     public int Code { get; set; }
+    public int ScanCode { get; set; }
+    public bool Extended { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
     public double DelayMs { get; set; } = 1.0;
@@ -30,6 +32,8 @@ public sealed class AppData
     public bool RecordMouse { get; set; } = true;
     public bool RecordMovement { get; set; }
     public bool Loop { get; set; }
+    public bool HoldToPlay { get; set; }
+    public bool UseScanCodes { get; set; } = true;
     public decimal Speed { get; set; } = 1.0m;
     public decimal DefaultDelay { get; set; } = 1.0m;
 }
