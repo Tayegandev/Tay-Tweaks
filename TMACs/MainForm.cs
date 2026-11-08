@@ -526,7 +526,7 @@ public sealed class MainForm : Form
         RefreshSteps(); Save();
         SetStatus("Recording saved. Edit individual delays, then start playback.");
     }
-    private bool OnKeyEvent(int code, bool down)
+    private bool OnKeyEvent(int code, int scanCode, bool extended, bool down)
     {
         if (code == (int)Keys.Escape && down && _playing)
         {
@@ -557,7 +557,7 @@ public sealed class MainForm : Form
         if (!_recording || !_keyCapture.Checked) return false;
         if (down && !_heldRecordingKeys.Add(code)) return false;
         if (!down) _heldRecordingKeys.Remove(code);
-        AddRecorded(new MacroStep { Kind = down ? "KeyDown" : "KeyUp", Code = code });
+        AddRecorded(new MacroStep { Kind = down ? "KeyDown" : "KeyUp", Code = code, ScanCode = scanCode, Extended = extended });
         return false;
     }
     private void OnMouseEvent(MacroStep step)
@@ -584,7 +584,7 @@ public sealed class MainForm : Form
 
     private async void StartPlayback()
     {
-        if (_playing || _recording || _armed || Current.Steps.Count == 0) {
+        if ((_data.HoldToPlay && !_startHeld && !Focused && !ContainsFocus) || _playing || _recording || _armed || Current.Steps.Count == 0) {
             if (Current.Steps.Count == 0) SetStatus("Record some steps first.");
             return;
         }
@@ -594,7 +594,7 @@ public sealed class MainForm : Form
         _playing = true;
         SetStatus(_holdToPlay.Checked ? "▶  Hold start key to repeat; release to stop." : "▶  Playing. Press stop hotkey or Escape to stop.");
         try {
-            await MacroRunner.Run(steps, (double)_speed.Value, _loop.Checked || _holdToPlay.Checked, token.Token);
+            await MacroRunner.Run(steps, (double)_speed.Value, _loop.Checked || _holdToPlay.Checked, _data.UseScanCodes, token.Token);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { SetStatus("Playback error: " + ex.Message); }
