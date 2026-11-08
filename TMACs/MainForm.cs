@@ -12,6 +12,8 @@ public sealed class MainForm : Form
     private readonly HashSet<int> _heldRecordingKeys = new();
     private MacroProfile Current => _data.Profiles.First(p => p.Id == _data.SelectedId);
     private bool _recording, _armed, _playing, _loading;
+    private bool _startHeld;
+    private readonly CheckBox _holdToPlay = new();
     private CancellationTokenSource? _runCts;
     private readonly Color BackgroundColor = Color.FromArgb(6, 11, 29);
     private readonly Color Surface = Color.FromArgb(14, 26, 57);
@@ -272,7 +274,12 @@ public sealed class MainForm : Form
         right.Controls.Add(Place(TextLabel("GLOBAL HOTKEYS", 11, true), 13, 192, 220, 28));
         right.Controls.Add(Place(TextLabel("Start", 9, false, Muted), 13, 229, 75, 27));
         right.Controls.Add(Place(TextLabel("Stop", 9, false, Muted), 13, 270, 75, 27));
-        var keys = Enumerable.Range(1, 12).Select(i => "F" + i).ToArray();
+        var keys = Enumerable.Range(1, 12).Select(i => "F" + i)
+            .Concat(Enumerable.Range(0, 26).Select(i => ((char)('A' + i)).ToString()))
+            .Concat(Enumerable.Range(0, 10).Select(i => "D" + i))
+            .Concat(new[] { "Insert", "Home", "End", "PageUp", "PageDown", "Pause",
+                "Scroll", "Oemtilde", "OemMinus", "Oemplus", "OemOpenBrackets",
+                "OemCloseBrackets", "OemPipe", "OemSemicolon", "OemQuotes" }).ToArray();
         foreach (var combo in new[] { _startBind, _stopBind }) {
             combo.DropDownStyle = ComboBoxStyle.DropDownList;
             combo.Items.AddRange(keys); combo.ForeColor = Color.White; combo.BackColor = SurfaceLight;
@@ -288,13 +295,21 @@ public sealed class MainForm : Form
         _loop.SetBounds(13, 365, 220, 29);
         _loop.CheckedChanged += (_, _) => SaveSettings();
         right.Controls.Add(_loop);
-        right.Controls.Add(Place(TextLabel("Playback speed", 9, false, Muted), 13, 417, 140, 28));
+        _holdToPlay.Text = "Hold start key to repeat";
+        _holdToPlay.ForeColor = Color.White;
+        _holdToPlay.SetBounds(13, 391, 226, 28);
+        _holdToPlay.CheckedChanged += (_, _) => {
+            if (_holdToPlay.Checked) _loop.Checked = true;
+            SaveSettings();
+        };
+        right.Controls.Add(_holdToPlay);
+        right.Controls.Add(Place(TextLabel("Playback speed", 9, false, Muted), 13, 447, 140, 28));
         _speed.Minimum = 0.1m; _speed.Maximum = 10m; _speed.Increment = 0.1m;
-        _speed.DecimalPlaces = 1; _speed.SetBounds(143, 413, 90, 30);
+        _speed.DecimalPlaces = 1; _speed.SetBounds(143, 443, 90, 30);
         StyleNumber(_speed); _speed.ValueChanged += (_, _) => SaveSettings();
         right.Controls.Add(_speed);
         var note = TextLabel("0.5 ms is a setting, not a guaranteed Windows timing. Some games block injected input.", 9, false, Muted);
-        note.SetBounds(13, 473, 218, 106); note.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        note.SetBounds(13, 502, 218, 80); note.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         right.Controls.Add(note);
         var btnOpen = ButtonUI("Open profiles folder", false);
         btnOpen.SetBounds(13, 596, 226, 39);
@@ -359,6 +374,7 @@ public sealed class MainForm : Form
         _mouseCapture.Checked = _data.RecordMouse;
         _moveCapture.Checked = _data.RecordMovement;
         _loop.Checked = _data.Loop;
+        _holdToPlay.Checked = _data.HoldToPlay;
         _speed.Value = _data.Speed;
         _defaultDelay.Value = _data.DefaultDelay;
         _startBind.SelectedItem = _data.StartHotkey;
@@ -377,6 +393,7 @@ public sealed class MainForm : Form
         _data.RecordMouse = _mouseCapture.Checked;
         _data.RecordMovement = _moveCapture.Checked;
         _data.Loop = _loop.Checked;
+        _data.HoldToPlay = _holdToPlay.Checked;
         _data.Speed = _speed.Value;
         _data.DefaultDelay = _defaultDelay.Value;
         _data.StartHotkey = _startBind.SelectedItem?.ToString() ?? "F6";
@@ -518,9 +535,23 @@ public sealed class MainForm : Form
         }
         bool isStop = code == HotkeyCode(_data.StopHotkey);
         bool isStart = code == HotkeyCode(_data.StartHotkey);
-        if (isStop && down) { BeginInvoke((Action)StopEverything); return true; }
-        if (isStart && down && !_recording && !_armed) {
-            BeginInvoke((Action)StartPlayback); return true;
+        if (isStop && down) {
+            BeginInvoke((Action)StopEverything);
+            return true;
+        }
+        if (isStart && !_recording && !_armed)
+        {
+            if (down && !_startHeld)
+            {
+                _startHeld = true;
+                BeginInvoke((Action)StartPlayback);
+            }
+            else if (!down)
+            {
+                _startHeld = false;
+                if (_data.HoldToPlay) BeginInvoke((Action)StopPlaybackOnly);
+            }
+            return true;
         }
         if (isStop || isStart) return _recording;
         if (!_recording || !_keyCapture.Checked) return false;
@@ -561,9 +592,9 @@ public sealed class MainForm : Form
         var steps = Current.Steps.Select(s => s.Copy()).ToArray();
         var token = new CancellationTokenSource(); _runCts = token;
         _playing = true;
-        SetStatus("▶  Playing. Press stop hotkey or Escape to stop.");
+        SetStatus(_holdToPlay.Checked ? "▶  Hold start key to repeat; release to stop." : "▶  Playing. Press stop hotkey or Escape to stop.");
         try {
-            await MacroRunner.Run(steps, (double)_speed.Value, _loop.Checked, token.Token);
+            await MacroRunner.Run(steps, (double)_speed.Value, _loop.Checked || _holdToPlay.Checked, token.Token);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { SetStatus("Playback error: " + ex.Message); }
@@ -574,9 +605,11 @@ public sealed class MainForm : Form
             SetStatus("●  Ready");
         }
     }
+    private void StopPlaybackOnly() => _runCts?.Cancel();
     private void StopEverything()
     {
         StopRecording();
+        _startHeld = false;
         _runCts?.Cancel();
         SetStatus("■  Stopping...");
     }
