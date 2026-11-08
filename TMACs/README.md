@@ -1,4 +1,4 @@
-# TMAC's — Galaxy Macro Studio (v1.0.0)
+# TMAC's — Galaxy Macro Studio (v1.1.0)
 
 A lightweight, local-only Windows keyboard and mouse macro recorder with a dark-blue galaxy interface.
 
@@ -13,7 +13,7 @@ A lightweight, local-only Windows keyboard and mouse macro recorder with a dark-
 - No network access, advertising, updater, telemetry, or elevated privileges requested.
 
 ## Download the compiled app
-Open the repository **Actions** tab → **Build TMAC's Windows EXE** → latest successful run → download the **TMACs-v1.0.0-Windows-x64** artifact. Extract the ZIP and open TMACs.exe.
+Open the repository **Actions** tab → **Build TMAC's Windows EXE** → latest successful run → download the **TMACs-v1.1.0-Windows-x64** artifact. Extract the ZIP and open TMACs.exe.
 
 ## Notes
 - **0.5 ms is a requested timing setting, not a guaranteed interval.** The Windows scheduler, game frame rates and hardware may limit precision. The playback worker avoids continuously busy-waiting on long delays.
@@ -25,3 +25,9 @@ Open the repository **Actions** tab → **Build TMAC's Windows EXE** → latest 
 
 ## Developer build
 Requires .NET 8 SDK on Windows. The GitHub Actions workflow builds automatically; no local build is required for use.
+
+
+## v1.1.0
+- More configurable keyboard hotkeys, including letters and numbers.
+- Hold-to-repeat playback mode; releasing the start key cancels playback.
+- Scan-code input enabled for improved compatibility with ordinary games. Protected input is not bypassed.
