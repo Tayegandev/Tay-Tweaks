@@ -174,12 +174,12 @@ internal static class InputInjector
             int prefix = (int)((mapped >> 8) & 0xff);
             bool extended = s.Extended || prefix == 0xE0;
             bool scanMode = useScanCodes && scan != 0 && prefix != 0xE1;
-            uint flags = (s.Kind == "KeyUp" ? KEYEVENTF_KEYUP : 0)
+            uint keyFlags = (s.Kind == "KeyUp" ? KEYEVENTF_KEYUP : 0)
                 | (scanMode ? KEYEVENTF_SCANCODE : 0)
                 | (scanMode && extended ? KEYEVENTF_EXTENDEDKEY : 0);
             var i = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion {
                 ki = new KEYBDINPUT { wVk = scanMode ? (ushort)0 : (ushort)s.Code,
-                    wScan = scanMode ? (ushort)scan : (ushort)0, dwFlags = flags } } };
+                    wScan = scanMode ? (ushort)scan : (ushort)0, dwFlags = keyFlags } } };
             SendInput(1, new[] { i }, Marshal.SizeOf<INPUT>());
             return;
         }
