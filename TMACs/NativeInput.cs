@@ -27,7 +27,7 @@ internal sealed class GlobalHooks : IDisposable
     private IntPtr _keyboard, _mouse;
     private long _lastMove;
 
-    public Func<int, bool, bool>? KeyboardInput { get; set; }
+    public Func<int, int, bool, bool, bool>? KeyboardInput { get; set; }
     public Action<MacroStep>? MouseInput { get; set; }
     public bool CaptureMovement { get; set; }
 
@@ -61,7 +61,7 @@ internal sealed class GlobalHooks : IDisposable
                     bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
                     try
                     {
-                        if (KeyboardInput?.Invoke((int)data.vkCode, down) == true)
+                        if (KeyboardInput?.Invoke((int)data.vkCode, (int)data.scanCode, (data.flags & 1) != 0, down) == true)
                             return new IntPtr(1);
                     }
                     catch { /* Never break the system hook chain for an UI exception. */ }
@@ -129,7 +129,7 @@ internal sealed class GlobalHooks : IDisposable
 internal static class InputInjector
 {
     private const uint INPUT_MOUSE = 0, INPUT_KEYBOARD = 1;
-    private const uint KEYEVENTF_KEYUP = 2;
+    private const uint KEYEVENTF_KEYUP = 2, KEYEVENTF_SCANCODE = 8, KEYEVENTF_EXTENDEDKEY = 1;
     private const uint MOUSEEVENTF_LEFTDOWN = 2, MOUSEEVENTF_LEFTUP = 4;
     private const uint MOUSEEVENTF_RIGHTDOWN = 8, MOUSEEVENTF_RIGHTUP = 16;
     private const uint MOUSEEVENTF_MIDDLEDOWN = 32, MOUSEEVENTF_MIDDLEUP = 64;
@@ -154,19 +154,32 @@ internal static class InputInjector
         public ushort wVk, wScan; public uint dwFlags, time; public UIntPtr dwExtraInfo;
     }
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint MapVirtualKey(uint code, uint mapType);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint count, INPUT[] inputs, int size);
     [DllImport("user32.dll")]
     private static extern bool SetCursorPos(int x, int y);
 
-    public static void Emit(MacroStep s)
+    public static void Emit(MacroStep s, bool useScanCodes = true)
     {
         if (s.Kind == "Move") { SetCursorPos(s.X, s.Y); return; }
         if (s.Kind == "KeyDown" || s.Kind == "KeyUp")
         {
+            // Scan-code injection is recognized by more ordinary game input paths
+            // than virtual-key-only injection. This is standard Windows SendInput,
+            // not direct hardware input or an anti-cheat workaround.
+            uint mapped = MapVirtualKey((uint)s.Code, 4); // MAPVK_VK_TO_VSC_EX
+            int scan = s.ScanCode != 0 ? s.ScanCode : (int)(mapped & 0xff);
+            int prefix = (int)((mapped >> 8) & 0xff);
+            bool extended = s.Extended || prefix == 0xE0;
+            bool scanMode = useScanCodes && scan != 0 && prefix != 0xE1;
+            uint flags = (s.Kind == "KeyUp" ? KEYEVENTF_KEYUP : 0)
+                | (scanMode ? KEYEVENTF_SCANCODE : 0)
+                | (scanMode && extended ? KEYEVENTF_EXTENDEDKEY : 0);
             var i = new INPUT { type = INPUT_KEYBOARD, U = new InputUnion {
-                ki = new KEYBDINPUT { wVk = (ushort)s.Code,
-                    dwFlags = s.Kind == "KeyUp" ? KEYEVENTF_KEYUP : 0 } } };
+                ki = new KEYBDINPUT { wVk = scanMode ? (ushort)0 : (ushort)s.Code,
+                    wScan = scanMode ? (ushort)scan : (ushort)0, dwFlags = flags } } };
             SendInput(1, new[] { i }, Marshal.SizeOf<INPUT>());
             return;
         }
@@ -183,19 +196,26 @@ internal static class InputInjector
         SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
     }
 
-    public static void ReleaseKeys(IEnumerable<int> keys)
+    public static void ReleaseKeys(IEnumerable<int> keys, bool useScanCodes)
     {
         foreach (int key in keys)
-            Emit(new MacroStep { Kind = "KeyUp", Code = key });
+            Emit(new MacroStep { Kind = "KeyUp", Code = key }, useScanCodes);
+    }
+
+    public static void ReleaseMouseButtons(IEnumerable<string> buttons)
+    {
+        foreach (string button in buttons)
+            Emit(new MacroStep { Kind = button + "Up" });
     }
 }
 
 internal static class MacroRunner
 {
     public static async Task Run(IReadOnlyList<MacroStep> steps, double speed, bool loop,
-        CancellationToken ct)
+        bool useScanCodes, CancellationToken ct)
     {
         var held = new HashSet<int>();
+        var heldMouse = new HashSet<string>();
         try
         {
             do
@@ -206,16 +226,25 @@ internal static class MacroRunner
                     await WaitDelay(Math.Clamp(step.DelayMs / speed, 0.5, 600000), ct)
                         .ConfigureAwait(false);
                     ct.ThrowIfCancellationRequested();
-                    InputInjector.Emit(step);
+                    InputInjector.Emit(step, useScanCodes);
                     if (step.Kind == "KeyDown") held.Add(step.Code);
                     if (step.Kind == "KeyUp") held.Remove(step.Code);
+                    if (step.Kind is "LeftDown" or "RightDown" or "MiddleDown")
+                        heldMouse.Add(step.Kind[..^4]);
+                    if (step.Kind is "LeftUp" or "RightUp" or "MiddleUp")
+                        heldMouse.Remove(step.Kind[..^2]);
                 }
                 // Never keep keys pressed across loop boundaries.
-                InputInjector.ReleaseKeys(held);
+                InputInjector.ReleaseKeys(held, useScanCodes);
+                InputInjector.ReleaseMouseButtons(heldMouse);
                 held.Clear();
+                heldMouse.Clear();
             } while (loop && !ct.IsCancellationRequested);
         }
-        finally { InputInjector.ReleaseKeys(held); }
+        finally {
+            InputInjector.ReleaseKeys(held, useScanCodes);
+            InputInjector.ReleaseMouseButtons(heldMouse);
+        }
     }
 
     private static async Task WaitDelay(double ms, CancellationToken ct)
