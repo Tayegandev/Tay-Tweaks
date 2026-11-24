@@ -549,15 +549,24 @@ function PresetButton([string]$name,[int]$x,[scriptblock]$action){
  [void](TayTopButton ('TayPreset'+($name -replace '\s+','')) $name $x 137 154 $action)
 }
 PresetButton 'LIGHT' 100 {
+ $script:TayTweakBatch=$true
+ try{
  foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding'))}
+ }finally{$script:TayTweakBatch=$false}
  & $script:TayApplyFilter
 }
 PresetButton 'MEDIUM' 262 {
+ $script:TayTweakBatch=$true
+ try{
  foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored'))}
+ }finally{$script:TayTweakBatch=$false}
  & $script:TayApplyFilter
 }
 PresetButton 'PRO PERFORMANCE' 424 {
+ $script:TayTweakBatch=$true
+ try{
  foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored','menuanimation','menushowdelay','taskview','searchbutton','disabletaskbarbadges','disablewindowshakes','disableappbackground','disableactivityhistory','disableactivityupload','disablecloudclipboard','disableclipboardsync','disabletaskbarflashing'))}
+ }finally{$script:TayTweakBatch=$false}
  & $script:TayApplyFilter
 }
 foreach($t in $Tweaks){
