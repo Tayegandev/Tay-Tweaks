@@ -469,23 +469,147 @@ $homeStatus=New-Object System.Windows.Forms.Label;$homeStatus.Text="READY  •  
 $homePrevious=New-Object System.Windows.Forms.Label;$homePrevious.Text="PREVIOUSLY APPLIED TWEAKS`r`nNo saved tweak session yet.";$homePrevious.Location=[System.Drawing.Point]::new(34,300);$homePrevious.Size=[System.Drawing.Size]::new(850,210);$homePrevious.Font=New-Object System.Drawing.Font("Segoe UI",11);$homePrevious.ForeColor=[System.Drawing.Color]::FromArgb(235,238,244);$homeTab.Controls.Add($homePrevious)
 try{if(Test-Path $AppliedFile){$last=Get-Content $AppliedFile -Raw|ConvertFrom-Json;$names=@();foreach($id in @($last.Tweaks)){$t=$Tweaks|Where-Object{$_.Id -eq [string]$id}|Select-Object -First 1;if($t){$names+="• "+$t.Name}};if($names.Count -gt 0){$homePrevious.Text="PREVIOUSLY APPLIED / SELECTED`r`n"+($names -join "`r`n")}}}catch{}
 $homeClockTimer=New-Object System.Windows.Forms.Timer;$homeClockTimer.Interval=1000;$homeClockTimer.Add_Tick({$homeClock.Text=Get-Date -Format "HH:mm:ss";$homeDate.Text=Get-Date -Format "dddd, dd MMMM yyyy"});$homeClockTimer.Start()
-$tweakPanel=New-Object System.Windows.Forms.Panel;$tweakPanel.Dock="Fill";$tweakPanel.AutoScroll=$true;$tweakTab.Controls.Add($tweakPanel)
-$note=New-Object System.Windows.Forms.Label;$note.Text="Select settings. A restore point and registry backup are required before applying changes."; $note.Location=[System.Drawing.Point]::new(18,14);$note.Size=New-Object System.Drawing.Size(880,30);$note.ForeColor=[System.Drawing.Color]::FromArgb(255,115,65);$tweakPanel.Controls.Add($note)
-$checks=@{};$y=106;$lastGroup=""
-foreach($t in $Tweaks){
- if($t.Group -ne $lastGroup){$gh=New-Object System.Windows.Forms.Label;$gh.Text=("  " + $t.Group.ToUpper());$gh.Location=[System.Drawing.Point]::new(18,$y);$gh.Size=New-Object System.Drawing.Size(900,25);$gh.BackColor=[System.Drawing.Color]::FromArgb(38,13,17);$gh.ForeColor=[System.Drawing.Color]::FromArgb(255,125,55);$gh.Font=New-Object System.Drawing.Font("Segoe UI",10,[System.Drawing.FontStyle]::Bold);$tweakPanel.Controls.Add($gh);$y+=30;if($t.Group -eq "Universal / Extra Tweaks"){$warn=New-Object Windows.Forms.Label;$warn.Text="40 NEW OPTIONAL SETTINGS - not universal FPS boosts. Browser / Windows policies may affect normal features. Read descriptions; create a restore point.";$warn.Location=[Drawing.Point]::new(22,$y);$warn.Size=[Drawing.Size]::new(840,48);$warn.ForeColor=[Drawing.Color]::FromArgb(255,190,95);$tweakPanel.Controls.Add($warn);$y+=54};$lastGroup=$t.Group}
- $cb=New-Object System.Windows.Forms.CheckBox;$cb.Text=$t.Name;$cb.Checked=$t.Default;$cb.Location=[System.Drawing.Point]::new(20,$y);$cb.Size=New-Object System.Drawing.Size(870,24);$cb.Font=New-Object System.Drawing.Font("Segoe UI",10,[System.Drawing.FontStyle]::Bold);$cb.ForeColor=if($t.Advanced){[System.Drawing.Color]::FromArgb(255,190,95)}else{[System.Drawing.Color]::FromArgb(255,72,45)};$tweakPanel.Controls.Add($cb);$checks[$t.Id]=$cb
- $d=New-Object System.Windows.Forms.Label;$d.Text=$t.Desc;$d.Location=[System.Drawing.Point]::new(42,($y+24));$d.Size=New-Object System.Drawing.Size(850,34);$d.ForeColor=[System.Drawing.Color]::FromArgb(195,199,210);$tweakPanel.Controls.Add($d);$y+=78
+
+# v9: searchable, responsive, card-based Tweaks page.
+$checks=@{}
+$script:TayTweakCards=@{}
+$script:TayTweakBatch=$false
+$tweakRoot=New-Object Windows.Forms.Panel;$tweakRoot.Dock='Fill';$tweakTab.Controls.Add($tweakRoot)
+$tweakToolbar=New-Object Windows.Forms.Panel;$tweakToolbar.Dock='Top';$tweakToolbar.Height=177;$tweakToolbar.BackColor=[Drawing.Color]::FromArgb(17,17,30)
+$tweakRoot.Controls.Add($tweakToolbar)
+$tweakPanel=New-Object Windows.Forms.FlowLayoutPanel
+$tweakPanel.Dock='Fill';$tweakPanel.FlowDirection=[Windows.Forms.FlowDirection]::TopDown
+$tweakPanel.WrapContents=$false;$tweakPanel.AutoScroll=$true
+$tweakPanel.Padding=[Windows.Forms.Padding]::new(14,10,14,16)
+$tweakPanel.BackColor=[Drawing.Color]::FromArgb(12,11,21)
+$tweakRoot.Controls.Add($tweakPanel)
+$tweakPanel.BringToFront();$tweakToolbar.BringToFront()
+function TayTopLabel([string]$name,[string]$caption,[int]$x,[int]$y,[int]$width,[int]$height,[int]$fontSize=9){
+ $lab=New-Object Windows.Forms.Label;$lab.Name=$name;$lab.Text=$caption
+ $lab.Location=[Drawing.Point]::new($x,$y);$lab.Size=[Drawing.Size]::new($width,$height)
+ $lab.Font=New-Object Drawing.Font('Segoe UI',$fontSize)
+ $lab.ForeColor=[Drawing.Color]::FromArgb(225,226,239)
+ $tweakToolbar.Controls.Add($lab);return $lab
 }
-try { if(Test-Path $AppliedFile){$saved=Get-Content $AppliedFile -Raw | ConvertFrom-Json; foreach($id in @($saved.Tweaks)){if($checks.ContainsKey([string]$id)){$checks[[string]$id].Checked=$true}}} } catch { Log "Could not load prior selected tweaks: $($_.Exception.Message)" }
-
-# Presets only select checkboxes; the user must still review and click Apply.
-$presetLabel=New-Object System.Windows.Forms.Label;$presetLabel.Text="QUICK PRESETS  •  select a profile, review the checked tweaks, then Apply";$presetLabel.Location=[System.Drawing.Point]::new(18,43);$presetLabel.Size=[System.Drawing.Size]::new(820,20);$presetLabel.ForeColor=[System.Drawing.Color]::FromArgb(255,115,65);$tweakPanel.Controls.Add($presetLabel)
-function PresetButton([string]$label,[int]$x,[scriptblock]$action){$b=New-Object System.Windows.Forms.Button;$b.Text=$label;$b.Location=[System.Drawing.Point]::new($x,64);$b.Size=[System.Drawing.Size]::new(170,28);$b.FlatStyle="Flat";$b.FlatAppearance.BorderColor=[System.Drawing.Color]::FromArgb(255,72,45);$b.BackColor=[System.Drawing.Color]::FromArgb(32,13,15);$b.ForeColor=[System.Drawing.Color]::FromArgb(255,145,90);$b.Add_Click($action);$tweakPanel.Controls.Add($b)}
-PresetButton "LIGHT" 18 { foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding'))} }
-PresetButton "MEDIUM" 198 { foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored'))} }
-PresetButton "PRO PERFORMANCE" 378 { foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored','menuanimation','menushowdelay','taskview','searchbutton','disabletaskbarbadges','disablewindowshakes','disableappbackground','disableactivityhistory','disableactivityupload','disablecloudclipboard','disableclipboardsync','disabletaskbarflashing'))} }
-
+$tweakTitle=TayTopLabel 'TayTweakTitle' 'TWEAK LIBRARY' 18 10 700 37 19
+$tweakCount=TayTopLabel 'TayTweakCount' '0 selected' 20 44 720 23 9
+$tweakSearch=New-Object Windows.Forms.TextBox
+$tweakSearch.Name='TayTweakSearch';$tweakSearch.Location=[Drawing.Point]::new(18,75)
+$tweakSearch.Size=[Drawing.Size]::new(344,29);$tweakSearch.Font=New-Object Drawing.Font('Segoe UI',10)
+$tweakSearch.BorderStyle='FixedSingle'
+$tweakToolbar.Controls.Add($tweakSearch)
+$tweakCategory=New-Object Windows.Forms.ComboBox
+$tweakCategory.Name='TayTweakCategory';$tweakCategory.Location=[Drawing.Point]::new(371,75)
+$tweakCategory.Size=[Drawing.Size]::new(214,29);$tweakCategory.Font=New-Object Drawing.Font('Segoe UI',9)
+$tweakCategory.DropDownStyle='DropDownList';[void]$tweakCategory.Items.Add('All categories')
+foreach($group in @($Tweaks|Select-Object -ExpandProperty Group -Unique|Sort-Object)){[void]$tweakCategory.Items.Add([string]$group)}
+$tweakCategory.SelectedIndex=0;$tweakToolbar.Controls.Add($tweakCategory)
+function TayTopButton([string]$name,[string]$caption,[int]$x,[int]$y,[int]$w,[scriptblock]$action){
+ $btn=New-Object Windows.Forms.Button
+ $btn.Name=$name;$btn.Text=$caption
+ $btn.Location=[Drawing.Point]::new($x,$y);$btn.Size=[Drawing.Size]::new($w,31)
+ $btn.FlatStyle='Flat';$btn.FlatAppearance.BorderSize=0
+ $btn.BackColor=[Drawing.Color]::FromArgb(45,41,62)
+ $btn.ForeColor=[Drawing.Color]::White
+ $btn.Font=New-Object Drawing.Font('Segoe UI',9,[Drawing.FontStyle]::Bold)
+ $btn.Add_Click($action);$tweakToolbar.Controls.Add($btn);return $btn
+}
+$script:TayApplyFilter={
+ if($script:TayTweakBatch){return}
+ $term=$tweakSearch.Text.Trim();$category=[string]$tweakCategory.SelectedItem
+ $shown=0;$picked=0
+ $tweakPanel.SuspendLayout()
+ try {
+  foreach($t in $Tweaks){
+   $matches=($category -eq 'All categories' -or $t.Group -eq $category)
+   if($term){
+    $matches=$matches -and ($t.Name.IndexOf($term,[StringComparison]::OrdinalIgnoreCase) -ge 0 -or $t.Desc.IndexOf($term,[StringComparison]::OrdinalIgnoreCase) -ge 0 -or $t.Group.IndexOf($term,[StringComparison]::OrdinalIgnoreCase) -ge 0)
+   }
+   $script:TayTweakCards[$t.Id].Visible=[bool]$matches
+   if($matches){$shown++}
+   if($checks[$t.Id].Checked){$picked++}
+  }
+  $tweakCount.Text="$picked / $($Tweaks.Count) selected   |   $shown showing"
+ }finally{$tweakPanel.ResumeLayout($true)}
+}
+function SetTayTweakSelections([bool]$checked){
+ $script:TayTweakBatch=$true
+ try{foreach($t in $Tweaks){$checks[$t.Id].Checked=$checked}}
+ finally{$script:TayTweakBatch=$false}
+ & $script:TayApplyFilter
+}
+$tweakSelectAll=TayTopButton 'TaySelectAll' 'Select All' 595 75 113 {
+ $text='Select all 153 tweaks? Some disable browser features, mic/camera permissions, and Windows search; these are not universal FPS improvements. Selecting does not apply them.'
+ if([Windows.Forms.MessageBox]::Show($text,'Advanced selection','YesNo','Warning') -eq [Windows.Forms.DialogResult]::Yes){SetTayTweakSelections $true}
+}
+$tweakClearAll=TayTopButton 'TayClearAll' 'Clear All' 715 75 102 {SetTayTweakSelections $false}
+$tweakHint=TayTopLabel 'TayTweakHint' 'Search by name, description or category. Changes require confirmation and a restore point.' 18 109 840 21 9
+$tweakPresetText=TayTopLabel 'TayPresetLabel' 'PRESETS' 18 145 80 22 9
+function PresetButton([string]$name,[int]$x,[scriptblock]$action){
+ [void](TayTopButton ('TayPreset'+($name -replace '\s+','')) $name $x 137 154 $action)
+}
+PresetButton 'LIGHT' 100 {
+ foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding'))}
+ & $script:TayApplyFilter
+}
+PresetButton 'MEDIUM' 262 {
+ foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored'))}
+ & $script:TayApplyFilter
+}
+PresetButton 'PRO PERFORMANCE' 424 {
+ foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored','menuanimation','menushowdelay','taskview','searchbutton','disabletaskbarbadges','disablewindowshakes','disableappbackground','disableactivityhistory','disableactivityupload','disablecloudclipboard','disableclipboardsync','disabletaskbarflashing'))}
+ & $script:TayApplyFilter
+}
+foreach($t in $Tweaks){
+ $card=New-Object Windows.Forms.Panel
+ $card.Name='TayTweakCard_'+$t.Id;$card.Tag='TayCard'
+ $card.Size=[Drawing.Size]::new(820,93)
+ $card.Margin=[Windows.Forms.Padding]::new(0,0,0,10)
+ $card.BackColor=[Drawing.Color]::FromArgb(23,23,38)
+ $tweakPanel.Controls.Add($card)
+ $script:TayTweakCards[$t.Id]=$card
+ $cb=New-Object Windows.Forms.CheckBox
+ $cb.Name='TayTweakCheck_'+$t.Id
+ $cb.Text=$t.Name;$cb.Checked=$t.Default
+ $cb.Location=[Drawing.Point]::new(18,9);$cb.Size=[Drawing.Size]::new(775,27)
+ $cb.Font=New-Object Drawing.Font('Segoe UI',10,[Drawing.FontStyle]::Bold)
+ $cb.ForeColor=[Drawing.Color]::FromArgb(235,235,248)
+ $card.Controls.Add($cb);$checks[$t.Id]=$cb
+ $description=New-Object Windows.Forms.Label
+ $description.Name='TayTweakDescription_'+$t.Id;$description.Text=$t.Desc
+ $description.Location=[Drawing.Point]::new(39,39);$description.Size=[Drawing.Size]::new(750,38)
+ $description.Font=New-Object Drawing.Font('Segoe UI',8.5)
+ $description.ForeColor=[Drawing.Color]::FromArgb(157,161,187)
+ $card.Controls.Add($description)
+ $cb.Add_CheckedChanged({if(-not $script:TayTweakBatch){& $script:TayApplyFilter}})
+}
+function SetTayTweakCardWidths{
+ if(-not $tweakPanel -or $tweakPanel.IsDisposed){return}
+ $w=[math]::Max(625,$tweakPanel.ClientSize.Width-40)
+ $tweakPanel.SuspendLayout()
+ try {
+  foreach($card in @($script:TayTweakCards.Values)){
+   if($card.Width -ne $w){$card.Width=$w}
+   foreach($child in @($card.Controls)){
+    if($child -is [Windows.Forms.CheckBox]){$child.Width=$w-34}
+    elseif($child -is [Windows.Forms.Label]){$child.Width=$w-54}
+   }
+  }
+ }finally{$tweakPanel.ResumeLayout($false)}
+}
+$tweakPanel.Add_SizeChanged({SetTayTweakCardWidths})
+$tweakSearch.Add_TextChanged({& $script:TayApplyFilter})
+$tweakCategory.Add_SelectedIndexChanged({& $script:TayApplyFilter})
+try {
+ if(Test-Path $AppliedFile){
+  $saved=Get-Content $AppliedFile -Raw|ConvertFrom-Json
+  $script:TayTweakBatch=$true
+  foreach($id in @($saved.Tweaks)){if($checks.ContainsKey([string]$id)){$checks[[string]$id].Checked=$true}}
+ }
+}catch{Log "Loading selected tweaks: $($_.Exception.Message)"}
+finally{$script:TayTweakBatch=$false}
+SetTayTweakCardWidths
+& $script:TayApplyFilter
 
 # v7 Performance dashboard - use lightweight counters; enumerate hardware in a background job.
 $usageTab.AutoScroll=$true
@@ -632,12 +756,12 @@ function ApplyTheme {
   foreach($control in @($parent.Controls)){
    if($control -is [Windows.Forms.Button]){
     $control.FlatStyle='Flat';$control.FlatAppearance.BorderSize=0
-    $secondary=($control.Text -match '(Restore|Undo|Exit|Cancel|Logs|Normal|Back|Reset)')
+    $secondary=($control.Name -like 'TayPreset*' -or $control.Name -in @('TaySelectAll','TayClearAll') -or $control.Text -match '(Restore|Undo|Exit|Cancel|Logs|Normal|Back|Reset)')
     $control.BackColor=if($secondary){$surface}else{$accent}
     $control.ForeColor=if($secondary){$fg}else{[Drawing.Color]::FromArgb(18,18,28)}
     if($control.Height -ge 25){SetTayRounded $control 12}
    }elseif($control -is [Windows.Forms.Label]){
-    if($control -ne $ttl -and $control -ne $sub){$control.ForeColor=$fg}
+    if($control.Name -like 'TayTweakDescription_*' -or $control.Name -in @('TayTweakCount','TayTweakHint')){$control.ForeColor=$muted}elseif($control -ne $ttl -and $control -ne $sub){$control.ForeColor=$fg}
    }elseif($control -is [Windows.Forms.Panel] -and $control.Tag -eq 'TayCard'){
     $control.BackColor=$surface;SetTayRounded $control 17
    }elseif($control -is [Windows.Forms.ComboBox]){
@@ -875,7 +999,12 @@ $apply=BottomButton "Apply selected tweaks" 22 180;$restore=BottomButton "Create
 $apply.Add_Click({
  $selected=@($Tweaks|Where-Object{$checks[$_.Id].Checked})
  if($selected.Count -eq 0){[System.Windows.Forms.MessageBox]::Show("Select at least one tweak.","Tay Tweaks")|Out-Null;return}
- $summary=($selected|ForEach-Object{"• "+$_.Name}) -join "`r`n"
+ $summary=(@($selected|Select-Object -First 12|ForEach-Object{"• "+$_.Name}) -join [Environment]::NewLine)
+  if($selected.Count -gt 12){$summary += [Environment]::NewLine+"...and $($selected.Count-12) more"}
+  if($selected.Count -gt 45){
+   $large=[Windows.Forms.MessageBox]::Show("You selected $($selected.Count) tweaks. Applying so many options can disable useful features, including camera and microphone access. Not all selected settings boost game performance. Review selections carefully. Continue?",'Large batch warning','YesNo','Warning')
+   if($large -ne [Windows.Forms.DialogResult]::Yes){return}
+  }
  $c=[System.Windows.Forms.MessageBox]::Show("Create restore point and registry backup, then apply:`r`n`r`n$summary`r`n`r`nContinue?","Confirm changes","YesNo","Warning")
  if($c -ne [System.Windows.Forms.DialogResult]::Yes){return}
  $status.Text="Creating restore point…";$form.Refresh();if(-not(RestorePoint)){$status.Text="Stopped: restore point failed.";return}
