@@ -1,4 +1,5 @@
 name: Build Tay Tweaks v9 Modern UI Preview
+# Includes optimized preset selection batching to prevent UI hangs
 on:
   push:
     branches: [main]
