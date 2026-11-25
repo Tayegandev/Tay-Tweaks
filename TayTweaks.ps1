@@ -214,6 +214,15 @@ $Tweaks += @(
  [pscustomobject]@{Id='v9_cloud_spotlightwelcome';Name='Disable Windows Spotlight welcome content';Group='Universal / Extra Tweaks';Default=$false;Advanced=$true;Desc='Reduces Spotlight welcome prompts where supported; no direct game boost.';Changes=@(@{Path='HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent';Name='DisableWindowsSpotlightWindowsWelcomeExperience';Type='DWord';Value=1})}
 )
 
+# Process Lowering: opt-in background-activity preferences, not unsafe service killing.
+# Startup controls below are user-driven through Windows Task Manager/Settings.
+$Tweaks += @(
+ [pscustomobject]@{Id='v9pl_widgets_policy';Name='Prevent Windows Widgets background feed';Group='Process Lowering';Default=$false;Advanced=$true;Desc='Disallows News and Interests/Widgets content on supported builds. Widget feed may stop working; effect on CPU depends on whether it was running.';Changes=@(@{Path='HKLM:\SOFTWARE\Policies\Microsoft\Dsh';Name='AllowNewsAndInterests';Type='DWord';Value=0})},
+ [pscustomobject]@{Id='v9pl_relaunch_apps';Name='Stop automatically restarting apps after sign-in';Group='Process Lowering';Default=$false;Advanced=$true;Desc='Prevents eligible apps reopening automatically after a Windows restart or sign-in. Does not disable essential Windows startup services.';Changes=@(@{Path='HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon';Name='RestartApps';Type='DWord';Value=0})},
+ [pscustomobject]@{Id='v9pl_policy_background';Name='Restrict Store app background execution (advanced)';Group='Process Lowering';Default=$false;Advanced=$true;Desc='Windows policy for Store-app background tasks. Can break notifications, messaging and sync; may not apply on all Windows editions. Not recommended unless understood.';Changes=@(@{Path='HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy';Name='LetAppsRunInBackground';Type='DWord';Value=2})},
+ [pscustomobject]@{Id='v9pl_activity_feed';Name='Disable legacy Windows activity feed';Group='Process Lowering';Default=$false;Advanced=$true;Desc='Disables the legacy activity feed when supported. Older functionality only; do not expect a measurable gaming FPS increase.';Changes=@(@{Path='HKLM:\SOFTWARE\Policies\Microsoft\Windows\System';Name='EnableActivityFeed';Type='DWord';Value=0})}
+)
+
 $Tweaks = @($Tweaks | Sort-Object Group, Name)
 
 function Snapshot([array]$changes) {
@@ -539,7 +548,7 @@ function SetTayTweakSelections([bool]$checked){
  & $script:TayApplyFilter
 }
 $tweakSelectAll=TayTopButton 'TaySelectAll' 'Select All' 595 75 113 {
- $text='Select all 153 tweaks? Some disable browser features, mic/camera permissions, and Windows search; these are not universal FPS improvements. Selecting does not apply them.'
+ $text="Select all $($Tweaks.Count) tweaks? This can change browser, accessibility, camera/mic, background apps and Windows features. These are NOT universal FPS improvements. Selection does not apply until you confirm."
  if([Windows.Forms.MessageBox]::Show($text,'Advanced selection','YesNo','Warning') -eq [Windows.Forms.DialogResult]::Yes){SetTayTweakSelections $true}
 }
 $tweakClearAll=TayTopButton 'TayClearAll' 'Clear All' 715 75 102 {SetTayTweakSelections $false}
@@ -548,6 +557,39 @@ $tweakPresetText=TayTopLabel 'TayPresetLabel' 'PRESETS' 18 145 80 22 9
 function PresetButton([string]$name,[int]$x,[scriptblock]$action){
  [void](TayTopButton ('TayPreset'+($name -replace '\s+','')) $name $x 137 154 $action)
 }
+# Process Lowering tools appear when the corresponding tweak category is selected.
+# We do not auto-disable unknown startup entries or critical services.
+$tweakProcessHint=TayTopLabel 'TayProcessHint' 'PROCESS LOWERING: manage recognizable startup apps and inspect CPU usage. Never disable essential services.' 18 109 850 23 9
+$tweakProcessHint.Visible=$false
+$tweakStartupButton=TayTopButton 'TayProcessStartup' 'Startup apps' 98 137 152 {
+ try{Start-Process 'ms-settings:startupapps'}
+ catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Startup Apps')|Out-Null}
+}
+$tweakCpuButton=TayTopButton 'TayProcessCpu' 'Top CPU processes' 258 137 168 {
+ try {
+  # Cumulative CPU seconds, not instantaneous CPU percent. Displayed honestly.
+  $entries=Get-Process -ErrorAction SilentlyContinue|Where-Object {$_.CPU -ne $null}|
+   Sort-Object CPU -Descending|Select-Object -First 20 ProcessName,Id,
+    @{N='CPU_seconds_total';E={[math]::Round($_.CPU,1)}},
+    @{N='RAM_MB';E={[math]::Round($_.WorkingSet64/1MB,1)}}
+  ShowOutput 'Processes by cumulative CPU time' ("Totals since each process started, not live CPU %. Do not end unidentified system or security processes.\`r\`n\`r\`n"+($entries|Format-Table -AutoSize|Out-String))
+ }catch{ShowOutput 'Process report error' $_.Exception.Message}
+}
+$tweakTaskButton=TayTopButton 'TayProcessTaskManager' 'Task Manager' 434 137 152 {
+ try{Start-Process taskmgr.exe}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'Task Manager')|Out-Null}
+}
+function SetTayProcessToolbar {
+ $active=([string]$tweakCategory.SelectedItem -eq 'Process Lowering')
+ foreach($c in @($tweakStartupButton,$tweakCpuButton,$tweakTaskButton,$tweakProcessHint)){$c.Visible=$active}
+ foreach($c in @($tweakPresetText)){if($c){$c.Visible=-not $active}}
+ foreach($name in @('TayPresetLIGHT','TayPresetMEDIUM','TayPresetPROPERFORMANCE')){
+  foreach($c in @($tweakToolbar.Controls)){if($c.Name -eq $name){$c.Visible=-not $active}}
+ }
+ if($tweakHint){$tweakHint.Visible=-not $active}
+}
+$tweakCategory.Add_SelectedIndexChanged({SetTayProcessToolbar})
+SetTayProcessToolbar
+
 PresetButton 'LIGHT' 100 {
  $script:TayTweakBatch=$true
  try{
@@ -565,7 +607,8 @@ PresetButton 'MEDIUM' 262 {
 PresetButton 'PRO PERFORMANCE' 424 {
  $script:TayTweakBatch=$true
  try{
- foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored','menuanimation','menushowdelay','taskview','searchbutton','disabletaskbarbadges','disablewindowshakes','disableappbackground','disableactivityhistory','disableactivityupload','disablecloudclipboard','disableclipboardsync','disabletaskbarflashing'))}
+ SetTayProcessToolbar
+foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode','transparency','visualfx','suggestions','gametips','searchhighlights','locktips','disablesoftlanding','privacyads','launchtracking','notifications','quickaccessrecent','quickaccessfrequent','taskbarwidgets','taskbarchat','disablewebsearch','disableconsumerfeatures','disablefeedback','disabletailored','menuanimation','menushowdelay','taskview','searchbutton','disabletaskbarbadges','disablewindowshakes','disableappbackground','disableactivityhistory','disableactivityupload','disablecloudclipboard','disableclipboardsync','disabletaskbarflashing'))}
  }finally{$script:TayTweakBatch=$false}
  & $script:TayApplyFilter
 }
