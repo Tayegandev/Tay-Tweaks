@@ -592,21 +592,33 @@ foreach($t in $Tweaks){
  $card.Controls.Add($description)
  $cb.Add_CheckedChanged({if(-not $script:TayTweakBatch){& $script:TayApplyFilter}})
 }
-function SetTayTweakCardWidths{
- if(-not $tweakPanel -or $tweakPanel.IsDisposed){return}
- $w=[math]::Max(625,$tweakPanel.ClientSize.Width-40)
- $tweakPanel.SuspendLayout()
+# Layout from visible tab size rather than hidden FlowLayoutPanel's startup width.
+$script:TayTweakWidthBusy=$false
+function SetTayTweakCardWidths {
+ if(-not $tweakTab -or $tweakTab.IsDisposed -or $script:TayTweakWidthBusy){return}
+ if($tweakTab.ClientSize.Width -lt 300){return}
+ $script:TayTweakWidthBusy=$true
  try {
-  foreach($card in @($script:TayTweakCards.Values)){
-   if($card.Width -ne $w){$card.Width=$w}
-   foreach($child in @($card.Controls)){
-    if($child -is [Windows.Forms.CheckBox]){$child.Width=$w-34}
-    elseif($child -is [Windows.Forms.Label]){$child.Width=$w-54}
+  $width=[int][math]::Max(580,($tweakTab.ClientSize.Width-56))
+  $tweakPanel.SuspendLayout()
+  try {
+   foreach($card in @($script:TayTweakCards.Values)){
+    if($card.Width -ne $width){$card.Width=$width;SetTayRounded $card 15}
+    foreach($child in @($card.Controls)){
+     if($child -is [Windows.Forms.CheckBox]){$child.Width=$width-34}
+     elseif($child -is [Windows.Forms.Label]){$child.Width=$width-56}
+    }
    }
-  }
- }finally{$tweakPanel.ResumeLayout($false)}
+  }finally{$tweakPanel.ResumeLayout($false)}
+ }catch{Log "Tweak card resize: $($_.Exception.Message)"}
+ finally{$script:TayTweakWidthBusy=$false}
 }
-$tweakPanel.Add_SizeChanged({SetTayTweakCardWidths})
+$tweakPanel.Add_SizeChanged({if($tabs.SelectedTab -eq $tweakTab){SetTayTweakCardWidths}})
+$tweakTab.Add_SizeChanged({SetTayTweakCardWidths})
+$tweakTab.Add_Enter({SetTayTweakCardWidths})
+$tabs.Add_SelectedIndexChanged({if($tabs.SelectedTab -eq $tweakTab){SetTayTweakCardWidths}})
+$form.Add_Shown({SetTayTweakCardWidths})
+$form.Add_Resize({if($tabs.SelectedTab -eq $tweakTab){SetTayTweakCardWidths}})
 $tweakSearch.Add_TextChanged({& $script:TayApplyFilter})
 $tweakCategory.Add_SelectedIndexChanged({& $script:TayApplyFilter})
 try {
