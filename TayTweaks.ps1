@@ -656,7 +656,7 @@ $specRows=@(@('CPU',49),@('GPU',105),@('MEMORY',161),@('OS',217))
 foreach($item in $specRows){
  $k=[string]$item[0];$y=[int]$item[1]
  $h=New-Object Windows.Forms.Label;$h.Text=$k;$h.Location=[Drawing.Point]::new(19,$y);$h.Size=[Drawing.Size]::new(284,19);$h.Font=New-Object Drawing.Font('Segoe UI',8,[Drawing.FontStyle]::Bold);$h.ForeColor=[Drawing.Color]::FromArgb(141,146,170);$usageInfo.Controls.Add($h)
- $v=New-Object Windows.Forms.Label;$v.Text='Detecting...';$v.Location=[Drawing.Point]::new(19,($y+19));$v.Size=[Drawing.Size]::new(284,36);$v.Font=New-Object Drawing.Font('Segoe UI',9);$v.ForeColor=[Drawing.Color]::White;$usageInfo.Controls.Add($v);$script:specLabels[$k]=$v
+ $v=New-Object Windows.Forms.Label;$v.Text='Detecting...';$v.Location=[Drawing.Point]::new(19,($y+19));$v.Size=[Drawing.Size]::new(284,36);$v.Font=New-Object Drawing.Font('Segoe UI',9);$v.ForeColor=[Drawing.Color]::White;$usageInfo.Controls.Add($v);$v.AutoEllipsis=$true;$script:specLabels[$k]=$v
 }
 $usageChart=New-Object Windows.Forms.Panel;$usageChart.Location=[Drawing.Point]::new(349,263);$usageChart.Size=[Drawing.Size]::new(483,281);$usageChart.BackColor=[Drawing.Color]::FromArgb(20,21,34);$usageChart.Tag='TayCard';$usageTab.Controls.Add($usageChart)
 $usageGraphTitle=New-Object Windows.Forms.Label;$usageGraphTitle.Text='Activity history';$usageGraphTitle.Location=[Drawing.Point]::new(19,13);$usageGraphTitle.Size=[Drawing.Size]::new(220,29);$usageGraphTitle.Font=New-Object Drawing.Font('Segoe UI',13,[Drawing.FontStyle]::Bold);$usageChart.Controls.Add($usageGraphTitle)
@@ -714,6 +714,8 @@ $specPoll.Add_Tick({
    $script:specLabels['GPU'].Text=[string]$data.GPU
    $script:specLabels['MEMORY'].Text=[string]$data.Memory
    $script:specLabels['OS'].Text=[string]$data.OS
+   if(-not $script:TaySpecTip){$script:TaySpecTip=New-Object Windows.Forms.ToolTip}
+   foreach($key in @('CPU','GPU','MEMORY','OS')){$script:TaySpecTip.SetToolTip($script:specLabels[$key],$script:specLabels[$key].Text)}
    $script:usageSpecsLoaded=$true
   }else{throw 'Empty hardware result'}
  }catch{foreach($v in $script:specLabels.Values){$v.Text='Detection unavailable'};Log "Usage hardware discovery: $($_.Exception.Message)"}
@@ -723,13 +725,35 @@ function UpdateUsageSpecs {
  if($script:usageSpecsLoaded -or $script:specJob){return}
  try{$script:specJob=Start-Job -ScriptBlock {
   $cpu='Unavailable';$gpu='Unavailable';$mem='Unavailable';$os='Unavailable'
-  try{$c=Get-CimInstance Win32_Processor -ErrorAction Stop|Select-Object -First 1;if($c){$cpu=([string]$c.Name).Trim()}}catch{}
-  try{$g=Get-CimInstance Win32_VideoController -ErrorAction Stop|Where-Object {$_.Name}|Select-Object -First 1;if($g){$gpu=([string]$g.Name).Trim()}}catch{}
-  try{$o=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop;if($o){$os=[string]$o.Caption;if($o.TotalVisibleMemorySize){$mem=('{0:N1} GB' -f ([double]$o.TotalVisibleMemorySize/1MB))}}}catch{}
+  try{
+   $names=@(Get-CimInstance Win32_Processor -ErrorAction Stop | Where-Object {$_.Name} | ForEach-Object {([string]$_.Name).Trim()} | Select-Object -Unique)
+   if($names.Count){$cpu=$names -join ' / '}
+  }catch{}
+  try{
+   # First display adapter is not guaranteed to be the active gaming GPU.
+   $names=@(Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object {$_.Name} | ForEach-Object {([string]$_.Name).Trim()} | Select-Object -Unique)
+   if($names.Count){$gpu=$names -join ' / '}
+  }catch{}
+  try{
+   $info=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+   if($info){
+    $os=[string]$info.Caption
+    $usable=0.0;$installed=0.0
+    if($info.TotalVisibleMemorySize){$usable=[math]::Round(([double]$info.TotalVisibleMemorySize/1048576),1)}
+    try{
+     $dimms=@(Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop | Where-Object {$_.Capacity -gt 0})
+     if($dimms.Count){$installed=[math]::Round((($dimms | Measure-Object Capacity -Sum).Sum / 1GB),1)}
+    }catch{}
+    if($installed -gt 0){
+     $mem=('{0:N1} GB installed' -f $installed)
+     if($usable -gt 0 -and ($installed-$usable) -ge 0.2){$mem+=(' / {0:N1} usable' -f $usable)}
+    }elseif($usable -gt 0){$mem=('{0:N1} GB usable' -f $usable)}
+   }
+  }catch{}
   [pscustomobject]@{CPU=$cpu;GPU=$gpu;Memory=$mem;OS=$os}
  };$specPoll.Start()}catch{Log "Usage hardware job failed: $($_.Exception.Message)";foreach($v in $script:specLabels.Values){$v.Text='Detection unavailable'}}
 }
-$usageTimer=New-Object Windows.Forms.Timer;$usageTimer.Interval=1400;$usageTimer.Add_Tick({UpdateUsage})
+$usageTimer=New-Object Windows.Forms.Timer;$usageTimer.Interval=900;$usageTimer.Add_Tick({UpdateUsage})
 $usageTab.Add_Enter({UpdateUsageSpecs;UpdateUsage;$usageTimer.Start()})
 $usageTab.Add_Leave({$usageTimer.Stop()})
 
@@ -1064,9 +1088,9 @@ function SetTayDashboardLayout {
   # The horizontal grid uses the actual tab viewport, never the form's old design width.
   $viewW=[int]$usageTab.ClientSize.Width
   $viewH=[int]$usageTab.ClientSize.Height
-  $contentW=[math]::Max(780,($viewW-2*$margin))
+  $contentW=[math]::Max(720,($viewW-2*$margin-4))
   $topY=82
-  $cardH=[int][math]::Max(182,[math]::Min(232,($viewH*0.26)))
+  $cardH=[int][math]::Max(180,[math]::Min(220,($viewH*0.25)))
   $cardW=[int][math]::Floor(($contentW-2*$gap)/3)
   for($i=0;$i -lt 3;$i++){
    $key=@('cpu','gpu','ram')[$i]
@@ -1087,21 +1111,21 @@ function SetTayDashboardLayout {
   }
   $bottomY=$topY+$cardH+$gap
   $bottomH=[int][math]::Max(280,($viewH-$bottomY-56))
-  $systemW=[int][math]::Floor(($contentW-$gap)*0.36)
+  $systemW=[int][math]::Floor(($contentW-$gap)*0.39)
   $chartW=[int]($contentW-$systemW-$gap)
   $usageInfo.Bounds=[Drawing.Rectangle]::new($margin,$bottomY,$systemW,$bottomH)
   $usageChart.Bounds=[Drawing.Rectangle]::new(($margin+$systemW+$gap),$bottomY,$chartW,$bottomH)
   $usageChartChoice.Left=[math]::Max(200,($chartW-$usageChartChoice.Width-18))
   $sysTitle.Width=[math]::Max(120,$systemW-36)
   $usageGraphTitle.Width=[math]::Max(160,$chartW-160)
-  $rowStep=[int][math]::Max(56,[math]::Floor(($bottomH-70)/4))
+  $rowStep=[int][math]::Max(65,[math]::Floor(($bottomH-55)/4))
   $labelNames=@('CPU','GPU','MEMORY','OS')
   for($i=0;$i -lt $labelNames.Count;$i++){
    $y=49+$i*$rowStep
    $key=$labelNames[$i]
    $valueLabel=$script:specLabels[$key]
    $valueLabel.Location=[Drawing.Point]::new(19,($y+19))
-   $valueLabel.Size=[Drawing.Size]::new(([math]::Max(120,$systemW-38)),40)
+   $valueLabel.Size=[Drawing.Size]::new(([math]::Max(120,$systemW-38)),54)
    # The category heading is immediately above its corresponding value label.
    foreach($control in @($usageInfo.Controls)){
     if($control -is [Windows.Forms.Label] -and $control -ne $sysTitle -and $control.Text -eq $key){
