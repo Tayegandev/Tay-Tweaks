@@ -572,7 +572,7 @@ $tweakCpuButton=TayTopButton 'TayProcessCpu' 'Top CPU processes' 258 137 168 {
    Sort-Object CPU -Descending|Select-Object -First 20 ProcessName,Id,
     @{N='CPU_seconds_total';E={[math]::Round($_.CPU,1)}},
     @{N='RAM_MB';E={[math]::Round($_.WorkingSet64/1MB,1)}}
-  ShowOutput 'Processes by cumulative CPU time' ("Totals since each process started, not live CPU %. Do not end unidentified system or security processes.\`r\`n\`r\`n"+($entries|Format-Table -AutoSize|Out-String))
+  ShowOutput 'Processes by cumulative CPU time' ("Totals since each process started, not live CPU %. Do not end unidentified system or security processes.`r`n`r`n"+($entries|Format-Table -AutoSize|Out-String))
  }catch{ShowOutput 'Process report error' $_.Exception.Message}
 }
 $tweakTaskButton=TayTopButton 'TayProcessTaskManager' 'Task Manager' 434 137 152 {
@@ -612,6 +612,7 @@ foreach($t in $Tweaks){$checks[$t.Id].Checked=($t.Id -in @('gamedvr','gamemode',
  }finally{$script:TayTweakBatch=$false}
  & $script:TayApplyFilter
 }
+SetTayProcessToolbar
 foreach($t in $Tweaks){
  $card=New-Object Windows.Forms.Panel
  $card.Name='TayTweakCard_'+$t.Id;$card.Tag='TayCard'
